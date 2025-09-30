@@ -12,6 +12,53 @@ router = APIRouter()
 ALLOWED_EXTENSIONS = {'.jpg', '.jpeg', '.png', '.gif', '.webp'}
 MAX_FILE_SIZE = 10 * 1024 * 1024  # 10MB
 
+@router.post("/image")
+async def upload_image(
+    file: UploadFile = File(...),
+    current_user: User = Depends(get_current_user)
+):
+    """Upload a single image and return its URL"""
+    
+    # Validate file type
+    if not file.filename:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Invalid filename"
+        )
+    
+    file_extension = '.' + file.filename.split('.')[-1].lower()
+    if file_extension not in ALLOWED_EXTENSIONS:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File type {file_extension} not allowed. Allowed types: {', '.join(ALLOWED_EXTENSIONS)}"
+        )
+    
+    # Check file size
+    file_content = await file.read()
+    if len(file_content) > MAX_FILE_SIZE:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"File {file.filename} is too large. Maximum size: 10MB"
+        )
+    
+    # Reset file pointer
+    await file.seek(0)
+    
+    # Upload to S3
+    file_url = await storage_service.upload_file(file, folder="events")
+    
+    if not file_url:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to upload {file.filename}"
+        )
+    
+    return {
+        "message": "Successfully uploaded file",
+        "filename": file.filename,
+        "url": file_url
+    }
+
 @router.post("/upload")
 async def upload_images(
     files: List[UploadFile] = File(...),
