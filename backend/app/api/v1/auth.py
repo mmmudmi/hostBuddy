@@ -1,9 +1,11 @@
 from fastapi import APIRouter, Depends, HTTPException, status
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
+from datetime import datetime, timedelta
 
 from ...core.database import get_db
 from ...core.auth import authenticate_user, create_access_token, get_password_hash, get_current_user
+from ...core.config import JWT_ACCESS_TOKEN_EXPIRE_MINUTES
 from ...models.models import User
 from ...schemas.user import UserCreate, UserResponse, UserLogin, Token
 
@@ -58,11 +60,18 @@ async def login_user(user_credentials: UserLogin, db: Session = Depends(get_db))
         )
     
     # Create access token
-    access_token = create_access_token(data={"sub": user.email})
+    expires_delta = timedelta(minutes=JWT_ACCESS_TOKEN_EXPIRE_MINUTES)
+    access_token = create_access_token(data={"sub": user.email}, expires_delta=expires_delta)
+    
+    # Calculate expiration time
+    expires_at = datetime.utcnow() + expires_delta
+    expires_in = int(expires_delta.total_seconds())
     
     return {
         "access_token": access_token,
-        "token_type": "bearer"
+        "token_type": "bearer",
+        "expires_in": expires_in,
+        "expires_at": expires_at
     }
 
 

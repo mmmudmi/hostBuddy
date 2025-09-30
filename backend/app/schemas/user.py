@@ -38,6 +38,8 @@ class UserLogin(BaseModel):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    expires_in: int  # seconds until expiration
+    expires_at: datetime  # absolute expiration time
 
 
 class TokenData(BaseModel):
