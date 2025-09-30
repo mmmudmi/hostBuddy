@@ -150,7 +150,12 @@ const Dashboard = () => {
         ) : (
           <div className="events-grid">
             {events.map((event) => (
-              <div key={event.event_id} className="event-card">
+              <div 
+                key={event.event_id} 
+                className="event-card"
+                onClick={() => navigate(`/events/${event.event_id}`)}
+                style={{ cursor: 'pointer' }}
+              >
                 {event.images && event.images.length > 0 && (
                   <img 
                     src={event.images[0]} 
@@ -171,38 +176,6 @@ const Dashboard = () => {
                   <div className="event-meta">
                     <div key="location">📍 {event.location}</div>
                     <div key="date">📅 {formatEventDates(event)}</div>
-                  </div>
-                  
-                  <div className="event-actions">
-                    <Link 
-                      key="view"
-                      to={`/events/${event.event_id}`}
-                      className="btn btn-secondary btn-small"
-                    >
-                      View Details
-                    </Link>
-                    <Link 
-                      key="edit"
-                      to={`/events/${event.event_id}/edit`}
-                      className="btn btn-secondary btn-small"
-                    >
-                      Edit
-                    </Link>
-                    <Link 
-                      key="layout"
-                                            to={`/events/${event.event_id}/layout`}
-                      className="btn btn-primary btn-small"
-                    >
-                      Design Layout
-                    </Link>
-                    <button 
-                      key="delete"
-                      onClick={() => handleDeleteEvent(event.event_id)}
-                      className="btn btn-danger btn-small"
-                      disabled={deletingEventId === event.event_id}
-                    >
-                      {deletingEventId === event.event_id ? 'Deleting...' : 'Delete'}
-                    </button>
                   </div>
                 </div>
               </div>

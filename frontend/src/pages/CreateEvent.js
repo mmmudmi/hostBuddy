@@ -16,7 +16,8 @@ const CreateEvent = () => {
     start_date: '',
     end_date: '',
     start_time: '',
-    end_time: ''
+    end_time: '',
+    image_url: ''
   });
   
   const [imageFile, setImageFile] = useState(null);
@@ -48,6 +49,7 @@ const CreateEvent = () => {
 
   useEffect(() => {
     if (isEditing && currentEvent) {
+      const existingImageUrl = (currentEvent.images && currentEvent.images.length > 0) ? currentEvent.images[0] : '';
       setFormData({
         title: currentEvent.title || '',
         description: currentEvent.description || '',
@@ -55,9 +57,10 @@ const CreateEvent = () => {
         start_date: currentEvent.start_date || '',
         end_date: currentEvent.end_date || '',
         start_time: currentEvent.start_time || '',
-        end_time: currentEvent.end_time || ''
+        end_time: currentEvent.end_time || '',
+        image_url: existingImageUrl
       });
-      setImagePreview((currentEvent.images && currentEvent.images.length > 0) ? currentEvent.images[0] : '');
+      setImagePreview(existingImageUrl);
     }
   }, [isEditing, currentEvent]);
 

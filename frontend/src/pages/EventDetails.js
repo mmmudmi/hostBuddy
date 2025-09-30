@@ -230,10 +230,6 @@ const EventDetails = () => {
             <h3 style={styles.sectionTitle}>Event Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1.5rem' }}>
               <div style={styles.infoCard}>
-                <h4>Event ID</h4>
-                <p>{currentEvent.event_id}</p>
-              </div>
-              <div style={styles.infoCard}>
                 <h4>Created</h4>
                 <p>{new Date(currentEvent.created_at).toLocaleDateString()}</p>
               </div>
