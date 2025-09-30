@@ -6,7 +6,7 @@ DATABASE_URL = config("DATABASE_URL", default="postgresql://username:password@lo
 # JWT settings
 JWT_SECRET_KEY = config("JWT_SECRET_KEY", default="change-this-secret-key-in-production")
 JWT_ALGORITHM = config("JWT_ALGORITHM", default="HS256")
-JWT_ACCESS_TOKEN_EXPIRE_MINUTES = config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", default=30, cast=int)
+JWT_ACCESS_TOKEN_EXPIRE_MINUTES = config("JWT_ACCESS_TOKEN_EXPIRE_MINUTES", default=10080, cast=int)  # 7 days
 
 # PostgreSQL settings
 POSTGRES_USER = config("POSTGRES_USER", default="username")

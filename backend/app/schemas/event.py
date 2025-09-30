@@ -1,14 +1,17 @@
 from pydantic import BaseModel
-from datetime import datetime
-from typing import Optional, List, Dict, Any
+from datetime import datetime, date, time
+from typing import Optional, List
 
 
 # Event Schemas
 class EventBase(BaseModel):
     title: str
     description: Optional[str] = None
-    date: datetime
     location: Optional[str] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
 
 
 class EventCreate(EventBase):
@@ -18,9 +21,12 @@ class EventCreate(EventBase):
 class EventUpdate(BaseModel):
     title: Optional[str] = None
     description: Optional[str] = None
-    date: Optional[datetime] = None
     location: Optional[str] = None
     images: Optional[List[str]] = None
+    start_date: Optional[date] = None
+    end_date: Optional[date] = None
+    start_time: Optional[time] = None
+    end_time: Optional[time] = None
 
 
 class EventResponse(EventBase):

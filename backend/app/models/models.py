@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, ARRAY
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, ARRAY, Date, Time
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
@@ -27,9 +27,12 @@ class Event(Base):
     user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
     title = Column(String(200), nullable=False)
     description = Column(Text)
-    date = Column(DateTime, nullable=False)
     location = Column(String(500))
     images = Column(ARRAY(String), default=[])
+    start_time = Column(Time)
+    end_time = Column(Time)
+    start_date = Column(Date)
+    end_date = Column(Date)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     

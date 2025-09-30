@@ -17,13 +17,17 @@ async def create_event(
     current_user: User = Depends(get_current_user)
 ):
     """Create a new event"""
+    # Create the event
     db_event = Event(
         user_id=current_user.user_id,
         title=event.title,
         description=event.description,
-        date=event.date,
         location=event.location,
-        images=event.images or []
+        images=event.images or [],
+        start_date=event.start_date,
+        end_date=event.end_date,
+        start_time=event.start_time,
+        end_time=event.end_time
     )
     
     db.add(db_event)
@@ -39,7 +43,9 @@ async def get_user_events(
     current_user: User = Depends(get_current_user)
 ):
     """Get all events for the current user"""
-    events = db.query(Event).filter(Event.user_id == current_user.user_id).all()
+    events = db.query(Event).filter(
+        Event.user_id == current_user.user_id
+    ).all()
     return events
 
 
@@ -83,7 +89,7 @@ async def update_event(
             detail="Event not found"
         )
     
-    # Update fields that are provided
+    # Update event fields
     update_data = event_update.dict(exclude_unset=True)
     for field, value in update_data.items():
         setattr(event, field, value)
