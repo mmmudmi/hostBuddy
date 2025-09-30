@@ -1,0 +1,366 @@
+.App {
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
+
+.App-main {
+  flex: 1;
+}
+
+/* Hero Section */
+.hero {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+  padding: 100px 0;
+  text-align: center;
+}
+
+.hero h1 {
+  font-size: 3.5rem;
+  font-weight: 700;
+  margin-bottom: 1rem;
+}
+
+.hero p {
+  font-size: 1.25rem;
+  margin-bottom: 2rem;
+  opacity: 0.9;
+}
+
+.hero-buttons {
+  display: flex;
+  gap: 1rem;
+  justify-content: center;
+  flex-wrap: wrap;
+}
+
+/* Features Section */
+.features {
+  padding: 80px 0;
+  background-color: white;
+}
+
+.features h2 {
+  text-align: center;
+  font-size: 2.5rem;
+  color: #1f2937;
+  margin-bottom: 3rem;
+}
+
+.features-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 2rem;
+  margin-top: 3rem;
+}
+
+.feature-card {
+  text-align: center;
+  padding: 2rem;
+  border-radius: 12px;
+  transition: transform 0.2s ease;
+}
+
+.feature-card:hover {
+  transform: translateY(-5px);
+}
+
+.feature-icon {
+  width: 64px;
+  height: 64px;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 1rem;
+  color: white;
+  font-size: 1.5rem;
+}
+
+.feature-card h3 {
+  font-size: 1.5rem;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.feature-card p {
+  color: #6b7280;
+  line-height: 1.6;
+}
+
+/* Auth Forms */
+.auth-container {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background-color: #f9fafb;
+  padding: 20px;
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 400px;
+  background: white;
+  padding: 2rem;
+  border-radius: 12px;
+  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.1);
+}
+
+.auth-title {
+  font-size: 2rem;
+  color: #1f2937;
+  text-align: center;
+  margin-bottom: 2rem;
+}
+
+.auth-link {
+  text-align: center;
+  margin-top: 1.5rem;
+  color: #6b7280;
+}
+
+.auth-link a {
+  color: #3b82f6;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.auth-link a:hover {
+  text-decoration: underline;
+}
+
+/* Dashboard */
+.dashboard {
+  padding: 2rem 0;
+  min-height: calc(100vh - 80px);
+}
+
+.dashboard-header {
+  display: flex;
+  justify-content: between;
+  align-items: center;
+  margin-bottom: 2rem;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.dashboard-title {
+  font-size: 2.5rem;
+  color: #1f2937;
+}
+
+.events-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
+  gap: 1.5rem;
+}
+
+.event-card {
+  background: white;
+  border-radius: 12px;
+  overflow: hidden;
+  transition: transform 0.2s ease, box-shadow 0.2s ease;
+  border: 1px solid #e5e7eb;
+}
+
+.event-card:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 8px 25px rgba(0, 0, 0, 0.1);
+}
+
+.event-image {
+  width: 100%;
+  height: 200px;
+  object-fit: cover;
+  background-color: #f3f4f6;
+}
+
+.event-content {
+  padding: 1.5rem;
+}
+
+.event-title {
+  font-size: 1.25rem;
+  color: #1f2937;
+  margin-bottom: 0.5rem;
+}
+
+.event-description {
+  color: #6b7280;
+  margin-bottom: 1rem;
+  line-height: 1.5;
+}
+
+.event-meta {
+  font-size: 0.875rem;
+  color: #9ca3af;
+  margin-bottom: 1rem;
+}
+
+.event-actions {
+  display: flex;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.btn-small {
+  padding: 8px 16px;
+  font-size: 14px;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 4rem 2rem;
+}
+
+.empty-state-icon {
+  width: 120px;
+  height: 120px;
+  background-color: #f3f4f6;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin: 0 auto 2rem;
+  color: #9ca3af;
+  font-size: 3rem;
+}
+
+.empty-state h3 {
+  font-size: 1.5rem;
+  color: #1f2937;
+  margin-bottom: 1rem;
+}
+
+.empty-state p {
+  color: #6b7280;
+  margin-bottom: 2rem;
+}
+
+/* Layout Designer */
+.layout-designer {
+  padding: 1rem;
+  height: calc(100vh - 80px);
+  display: flex;
+  flex-direction: column;
+}
+
+.layout-toolbar {
+  background: white;
+  padding: 1rem;
+  border-radius: 8px;
+  margin-bottom: 1rem;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.layout-content {
+  display: flex;
+  flex: 1;
+  gap: 1rem;
+  min-height: 0;
+}
+
+.layout-sidebar {
+  width: 250px;
+  background: white;
+  border-radius: 8px;
+  padding: 1rem;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+}
+
+.layout-canvas {
+  flex: 1;
+  background: white;
+  border-radius: 8px;
+  position: relative;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+}
+
+.drag-item {
+  padding: 12px;
+  margin: 8px 0;
+  background: #f3f4f6;
+  border-radius: 6px;
+  cursor: grab;
+  border: 2px solid transparent;
+  transition: all 0.2s ease;
+}
+
+.drag-item:hover {
+  background: #e5e7eb;
+  border-color: #3b82f6;
+}
+
+.drop-zone {
+  width: 100%;
+  height: 100%;
+  position: relative;
+  background-image: 
+    linear-gradient(rgba(156, 163, 175, 0.2) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(156, 163, 175, 0.2) 1px, transparent 1px);
+  background-size: 20px 20px;
+}
+
+.layout-element {
+  position: absolute;
+  border: 2px solid #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
+  border-radius: 4px;
+  cursor: move;
+  min-width: 50px;
+  min-height: 50px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  color: #1f2937;
+}
+
+.layout-element:hover {
+  border-color: #2563eb;
+  background: rgba(37, 99, 235, 0.2);
+}
+
+.layout-element.selected {
+  border-color: #dc2626;
+  background: rgba(220, 38, 38, 0.1);
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .hero h1 {
+    font-size: 2.5rem;
+  }
+  
+  .hero-buttons {
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .dashboard-header {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  
+  .layout-content {
+    flex-direction: column;
+  }
+  
+  .layout-sidebar {
+    width: 100%;
+    order: 2;
+  }
+  
+  .layout-canvas {
+    height: 400px;
+    order: 1;
+  }
+}
