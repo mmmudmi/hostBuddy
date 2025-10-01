@@ -196,7 +196,20 @@ const LayoutDesigner = () => {
 
   const exportToPNG = () => {
     if (stageRef.current) {
+      // Hide grid background during export
+      const layer = stageRef.current.getLayers()[0];
+      const gridElements = layer.find('.grid-element');
+      
+      // Hide grid elements
+      gridElements.forEach(element => element.visible(false));
+      layer.batchDraw();
+      
       const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
+      
+      // Show grid elements again
+      gridElements.forEach(element => element.visible(true));
+      layer.batchDraw();
+      
       const link = document.createElement('a');
       link.download = `${currentEvent?.title || 'layout'}-layout.png`;
       link.href = dataURL;
@@ -206,7 +219,20 @@ const LayoutDesigner = () => {
 
   const exportToPDF = () => {
     if (stageRef.current) {
+      // Hide grid background during export
+      const layer = stageRef.current.getLayers()[0];
+      const gridElements = layer.find('.grid-element');
+      
+      // Hide grid elements
+      gridElements.forEach(element => element.visible(false));
+      layer.batchDraw();
+      
       const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
+      
+      // Show grid elements again
+      gridElements.forEach(element => element.visible(true));
+      layer.batchDraw();
+      
       const pdf = new jsPDF('landscape');
       const imgWidth = 280;
       const imgHeight = 200;
@@ -475,6 +501,7 @@ const LayoutDesigner = () => {
               {Array.from({ length: 40 }, (_, i) => (
                 <React.Fragment key={`grid-${i}`}>
                   <Rect
+                    name="grid-element"
                     x={i * 20}
                     y={0}
                     width={1}
@@ -483,6 +510,7 @@ const LayoutDesigner = () => {
                     listening={false}
                   />
                   <Rect
+                    name="grid-element"
                     x={0}
                     y={i * 15}
                     width={800}
