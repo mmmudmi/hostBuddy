@@ -151,6 +151,102 @@ const LayoutDesigner = () => {
     setTempGroupBounds(null);
   };
 
+  // Calculate accurate visual bounds for different shape types
+  const getElementVisualBounds = useCallback((element) => {
+    const { x, y, width, height, type } = element;
+    
+    switch (type) {
+      case 'round': {
+        // Circle: x,y is the CENTER, radius is width/2
+        const radius = width / 2;
+        return {
+          minX: x - radius,
+          minY: y - radius,
+          maxX: x + radius,
+          maxY: y + radius
+        };
+      }
+      
+      case 'ellipse': {
+        // Ellipse: x,y is the CENTER, radiusX=width/2, radiusY=height/2
+        const radiusX = width / 2;
+        const radiusY = height / 2;
+        return {
+          minX: x - radiusX,
+          minY: y - radiusY,
+          maxX: x + radiusX,
+          maxY: y + radiusY
+        };
+      }
+      
+      case 'triangle':
+      case 'pentagon':
+      case 'hexagon':
+      case 'octagon': {
+        // Regular polygons: x,y is the CENTER, inscribed in circle with radius=width/2
+        const radius = width / 2;
+        return {
+          minX: x - radius,
+          minY: y - radius,
+          maxX: x + radius,
+          maxY: y + radius
+        };
+      }
+      
+      case 'star': {
+        // Star: x,y is the CENTER, outer radius=width/2
+        const outerRadius = width / 2;
+        return {
+          minX: x - outerRadius,
+          minY: y - outerRadius,
+          maxX: x + outerRadius,
+          maxY: y + outerRadius
+        };
+      }
+      
+      case 'arc': {
+        // Arc: x,y is the CENTER, outer radius=width/2
+        const outerRadius = width / 2;
+        return {
+          minX: x - outerRadius,
+          minY: y - outerRadius,
+          maxX: x + outerRadius,
+          maxY: y + outerRadius
+        };
+      }
+      
+      case 'line': {
+        // Line: x,y is start point, goes horizontally to x+width,y
+        return {
+          minX: x,
+          minY: y - (height || 2) / 2,
+          maxX: x + width,
+          maxY: y + (height || 2) / 2
+        };
+      }
+      
+      case 'text': {
+        // Text: x,y is top-left corner
+        return {
+          minX: x,
+          minY: y,
+          maxX: x + width,
+          maxY: y + height
+        };
+      }
+      
+      default: {
+        // Rectangle and other shapes: x,y is top-left corner
+        return {
+          minX: x,
+          minY: y,
+          maxX: x + width,
+          maxY: y + height
+        };
+      }
+    }
+  }, []);
+
   // Update temporary group bounds based on selected elements
   const updateTempGroupBounds = useCallback((selectedElementIds) => {
     if (selectedElementIds.length < 2) {
@@ -164,13 +260,14 @@ const LayoutDesigner = () => {
       return;
     }
     
-    // Calculate bounding box
+    // Calculate accurate bounding box using visual bounds
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     selectedElements.forEach(element => {
-      minX = Math.min(minX, element.x);
-      minY = Math.min(minY, element.y);
-      maxX = Math.max(maxX, element.x + (element.width || 0));
-      maxY = Math.max(maxY, element.y + (element.height || 0));
+      const bounds = getElementVisualBounds(element);
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
     });
     
     setTempGroupBounds({
@@ -179,7 +276,7 @@ const LayoutDesigner = () => {
       width: maxX - minX + 10,
       height: maxY - minY + 10,
     });
-  }, [layoutElements]);
+  }, [layoutElements, getElementVisualBounds]);
 
   // Update temp group bounds when elements change position
   useEffect(() => {
@@ -310,13 +407,14 @@ const LayoutDesigner = () => {
 
     const elementsToGroup = layoutElements.filter(element => selectedIds.includes(element.id));
     
-    // Calculate bounding box for the group
+    // Calculate accurate bounding box for the group using visual bounds
     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
     elementsToGroup.forEach(element => {
-      minX = Math.min(minX, element.x);
-      minY = Math.min(minY, element.y);
-      maxX = Math.max(maxX, element.x + element.width);
-      maxY = Math.max(maxY, element.y + element.height);
+      const bounds = getElementVisualBounds(element);
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
     });
 
     const groupId = `group_${Date.now()}`;
@@ -349,7 +447,7 @@ const LayoutDesigner = () => {
     setSelectedIds([]);
     setIsMultiSelect(false);
     setHasUnsavedChanges(true);
-  }, [selectedIds, layoutElements]);
+  }, [selectedIds, layoutElements, getElementVisualBounds]);
 
   // Ungroup selected group
   const ungroupElements = useCallback(() => {
@@ -1028,7 +1126,14 @@ const LayoutDesigner = () => {
       // Render group as a container with its children
       shape = (
         <Group {...groupProps}>
-          {/* Interactive group border */}
+          {/* Full area selection rectangle (invisible) */}
+          <Rect
+            width={element.width}
+            height={element.height}
+            fill="transparent"
+            listening={true} // This makes the entire area clickable
+          />
+          {/* Visual group border */}
           <Rect
             width={element.width}
             height={element.height}
@@ -1036,7 +1141,7 @@ const LayoutDesigner = () => {
             stroke={isSelected ? '#0066cc' : '#9ca3af'}
             strokeWidth={isSelected ? 2 : 1}
             dash={[5, 5]}
-            listening={true} // Make this interactive for dragging
+            listening={false} // Visual only, selection handled by the invisible rect above
           />
           {/* Render children within the group */}
           {element.children && element.children.map(child => {
