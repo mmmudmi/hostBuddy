@@ -101,3 +101,23 @@ async def get_layout(
         "created_at": layout.created_at,
         "updated_at": layout.updated_at
     }
+
+
+@router.delete("/{layout_id}")
+async def delete_layout(
+    layout_id: int,
+    db: Session = Depends(get_db)
+):
+    """Delete a specific layout by ID"""
+    layout = db.query(Layout).filter(Layout.layout_id == layout_id).first()
+    
+    if not layout:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Layout not found"
+        )
+    
+    db.delete(layout)
+    db.commit()
+    
+    return {"message": "Layout deleted successfully"}

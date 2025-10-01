@@ -43,7 +43,6 @@ const LoginPage = () => {
     console.log('Login result:', result);
     
     if (loginUser.fulfilled.match(result)) {
-      console.log('Login successful, navigating to dashboard');
       navigate('/dashboard');
     } else {
       console.log('Login failed:', result.payload);

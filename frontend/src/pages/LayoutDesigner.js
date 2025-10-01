@@ -98,6 +98,16 @@ const LayoutDesigner = () => {
       return;
     }
 
+    // Check for duplicate layout names within the same event
+    const isDuplicate = savedLayouts.some(layout => 
+      layout.title.trim() === layoutTitle.trim()
+    );
+
+    if (isDuplicate) {
+      alert(`A layout with the name "${layoutTitle}" already exists for this event. Please choose a different name.`);
+      return;
+    }
+
     setIsSaving(true);
     try {
       const layoutData = {
@@ -111,6 +121,12 @@ const LayoutDesigner = () => {
         await layoutAPI.createLayout(layoutData);
         alert('Layout saved successfully!');
       } catch (apiError) {
+        // Check if it's a duplicate name error from backend
+        if (apiError.response?.status === 400 && apiError.response?.data?.detail?.includes('already exists')) {
+          alert(apiError.response.data.detail);
+          return;
+        }
+        
         console.warn('Backend unavailable, saving to localStorage:', apiError);
         // Save to localStorage as fallback
         const savedLayouts = JSON.parse(localStorage.getItem('layouts') || '[]');
@@ -154,6 +170,27 @@ const LayoutDesigner = () => {
       } else {
         alert('Failed to load layout');
       }
+    }
+  };
+
+  const deleteLayout = async (layoutId, layoutTitle) => {
+    if (!window.confirm(`Are you sure you want to delete the layout "${layoutTitle}"?`)) {
+      return;
+    }
+
+    try {
+      // Try to delete from backend first
+      await layoutAPI.deleteLayout(layoutId);
+    } catch (error) {
+      console.warn('Backend unavailable, deleting from localStorage:', error);
+      // Fallback to localStorage
+      const savedLayouts = JSON.parse(localStorage.getItem('layouts') || '[]');
+      const updatedLayouts = savedLayouts.filter(l => l.id !== layoutId);
+      localStorage.setItem('layouts', JSON.stringify(updatedLayouts));
+      alert('Layout deleted locally (backend unavailable)');
+    } finally {
+      // Reload the layouts list
+      loadLayouts();
     }
   };
 
@@ -392,9 +429,23 @@ const LayoutDesigner = () => {
                   <div
                     key={layout.id}
                     style={styles.layoutItem}
-                    onClick={() => loadLayout(layout.id)}
                   >
-                    {layout.title}
+                    <span 
+                      style={styles.layoutTitle}
+                      onClick={() => loadLayout(layout.id)}
+                    >
+                      {layout.title}
+                    </span>
+                    <button
+                      style={styles.deleteButton}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        deleteLayout(layout.id, layout.title);
+                      }}
+                      title="Delete layout"
+                    >
+                      🗑️
+                    </button>
                   </div>
                 ))}
               </div>
@@ -553,8 +604,27 @@ const styles = {
     backgroundColor: 'white',
     border: '1px solid #e2e8f0',
     borderRadius: '6px',
-    cursor: 'pointer',
     transition: 'background-color 0.2s',
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  layoutTitle: {
+    cursor: 'pointer',
+    flex: 1,
+    fontSize: '0.9rem',
+  },
+  deleteButton: {
+    background: 'none',
+    border: 'none',
+    cursor: 'pointer',
+    fontSize: '1rem',
+    padding: '0.25rem',
+    borderRadius: '4px',
+    transition: 'background-color 0.2s',
+    ':hover': {
+      backgroundColor: '#fee2e2',
+    },
   },
   canvas: {
     flex: 1,

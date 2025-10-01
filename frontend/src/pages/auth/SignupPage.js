@@ -85,7 +85,6 @@ const SignupPage = () => {
     }));
     
     if (registerUser.fulfilled.match(result)) {
-      // Registration successful, redirect to login
       navigate('/login', { 
         state: { message: 'Registration successful! Please log in.' }
       });

@@ -31,9 +31,6 @@ const Dashboard = () => {
       try {
         setDeletingEventId(eventId);
         await dispatch(deleteEvent(eventId)).unwrap();
-        // Show success feedback
-        const eventToDelete = events.find(event => event.event_id === eventId);
-        alert(`Event "${eventToDelete?.title}" has been successfully deleted.`);
       } catch (error) {
         console.error('Failed to delete event:', error);
         
