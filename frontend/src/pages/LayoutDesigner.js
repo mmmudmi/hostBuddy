@@ -98,15 +98,10 @@ const LayoutDesigner = () => {
       return;
     }
 
-    // Check for duplicate layout names within the same event
-    const isDuplicate = savedLayouts.some(layout => 
-      layout.title.trim() === layoutTitle.trim()
+    // Check if a layout with the same name already exists
+    const existingLayout = savedLayouts.find(layout => 
+      layout.title.trim().toLowerCase() === layoutTitle.trim().toLowerCase()
     );
-
-    if (isDuplicate) {
-      alert(`A layout with the name "${layoutTitle}" already exists for this event. Please choose a different name.`);
-      return;
-    }
 
     setIsSaving(true);
     try {
@@ -118,26 +113,41 @@ const LayoutDesigner = () => {
       
       // Try to save to backend, fallback to localStorage if backend is unavailable
       try {
-        await layoutAPI.createLayout(layoutData);
-        alert('Layout saved successfully!');
-      } catch (apiError) {
-        // Check if it's a duplicate name error from backend
-        if (apiError.response?.status === 400 && apiError.response?.data?.detail?.includes('already exists')) {
-          alert(apiError.response.data.detail);
-          return;
+        if (existingLayout) {
+          // Update existing layout
+          await layoutAPI.updateLayout(existingLayout.id, layoutData);
+          alert('Layout updated successfully!');
+        } else {
+          // Create new layout
+          await layoutAPI.createLayout(layoutData);
+          alert('Layout saved successfully!');
         }
-        
+      } catch (apiError) {
         console.warn('Backend unavailable, saving to localStorage:', apiError);
         // Save to localStorage as fallback
         const savedLayouts = JSON.parse(localStorage.getItem('layouts') || '[]');
-        const newLayout = {
-          id: Date.now(),
-          ...layoutData,
-          created_at: new Date().toISOString()
-        };
-        savedLayouts.push(newLayout);
-        localStorage.setItem('layouts', JSON.stringify(savedLayouts));
-        alert('Layout saved locally (backend unavailable)');
+        
+        if (existingLayout) {
+          // Update existing layout in localStorage
+          const updatedLayouts = savedLayouts.map(layout => 
+            layout.id === existingLayout.id 
+              ? { ...layout, ...layoutData, updated_at: new Date().toISOString() }
+              : layout
+          );
+          localStorage.setItem('layouts', JSON.stringify(updatedLayouts));
+          alert('Layout updated locally (backend unavailable)');
+        } else {
+          // Create new layout in localStorage
+          const newLayout = {
+            id: Date.now(),
+            ...layoutData,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString()
+          };
+          savedLayouts.push(newLayout);
+          localStorage.setItem('layouts', JSON.stringify(savedLayouts));
+          alert('Layout saved locally (backend unavailable)');
+        }
       }
       
       setLayoutTitle('');
@@ -194,20 +204,92 @@ const LayoutDesigner = () => {
     }
   };
 
+  const newLayout = () => {
+    if (layoutElements.length > 0 || layoutTitle.trim()) {
+      if (!window.confirm('Are you sure you want to start a new layout? Any unsaved changes will be lost.')) {
+        return;
+      }
+    }
+    
+    // Clear everything for a fresh start
+    setLayoutElements([]);
+    setLayoutTitle('');
+    setSelectedId(null);
+  };
+
   const exportToPNG = () => {
     if (stageRef.current) {
+      // Save current selection
+      const currentSelection = selectedId;
+      
       // Hide grid background during export
       const layer = stageRef.current.getLayers()[0];
       const gridElements = layer.find('.grid-element');
       
-      // Hide grid elements
+      // Hide grid elements and clear transformer
       gridElements.forEach(element => element.visible(false));
+      if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+      }
+      
+      // Remove selection styling from all shapes
+      const allShapes = layer.find('Circle, Rect, Text').filter(node => !gridElements.includes(node));
+      allShapes.forEach(shape => {
+        shape.stroke('transparent');
+        shape.strokeWidth(0);
+      });
+      
       layer.batchDraw();
       
-      const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
+      // Calculate bounding box of all layout elements
+      if (layoutElements.length === 0) {
+        alert('No elements to export');
+        // Restore everything
+        gridElements.forEach(element => element.visible(true));
+        layer.batchDraw();
+        return;
+      }
       
-      // Show grid elements again
+      const padding = 20; // Add some padding around the elements
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      
+      layoutElements.forEach(element => {
+        const left = element.x;
+        const top = element.y;
+        const right = element.x + (element.type === 'round' ? element.width : element.width);
+        const bottom = element.y + (element.type === 'round' ? element.width : element.height);
+        
+        minX = Math.min(minX, left);
+        minY = Math.min(minY, top);
+        maxX = Math.max(maxX, right);
+        maxY = Math.max(maxY, bottom);
+      });
+      
+      const cropX = Math.max(0, minX - padding);
+      const cropY = Math.max(0, minY - padding);
+      const cropWidth = maxX - minX + (2 * padding);
+      const cropHeight = maxY - minY + (2 * padding);
+      
+      const dataURL = stageRef.current.toDataURL({ 
+        pixelRatio: 2,
+        x: cropX,
+        y: cropY,
+        width: cropWidth,
+        height: cropHeight
+      });
+      
+      // Restore grid elements and selection styling
       gridElements.forEach(element => element.visible(true));
+      
+      // Restore selection styling if there was a selection
+      if (currentSelection) {
+        const selectedShape = layer.findOne(`#${currentSelection}`);
+        if (selectedShape) {
+          selectedShape.stroke('#0066cc');
+          selectedShape.strokeWidth(2);
+        }
+      }
+      
       layer.batchDraw();
       
       const link = document.createElement('a');
@@ -219,25 +301,99 @@ const LayoutDesigner = () => {
 
   const exportToPDF = () => {
     if (stageRef.current) {
+      // Save current selection
+      const currentSelection = selectedId;
+      
       // Hide grid background during export
       const layer = stageRef.current.getLayers()[0];
       const gridElements = layer.find('.grid-element');
       
-      // Hide grid elements
+      // Hide grid elements and clear transformer
       gridElements.forEach(element => element.visible(false));
+      if (transformerRef.current) {
+        transformerRef.current.nodes([]);
+      }
+      
+      // Remove selection styling from all shapes
+      const allShapes = layer.find('Circle, Rect, Text').filter(node => !gridElements.includes(node));
+      allShapes.forEach(shape => {
+        shape.stroke('transparent');
+        shape.strokeWidth(0);
+      });
+      
       layer.batchDraw();
       
-      const dataURL = stageRef.current.toDataURL({ pixelRatio: 2 });
+      // Calculate bounding box of all layout elements
+      if (layoutElements.length === 0) {
+        alert('No elements to export');
+        // Restore everything
+        gridElements.forEach(element => element.visible(true));
+        layer.batchDraw();
+        return;
+      }
       
-      // Show grid elements again
+      const padding = 20; // Add some padding around the elements
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      
+      layoutElements.forEach(element => {
+        const left = element.x;
+        const top = element.y;
+        const right = element.x + (element.type === 'round' ? element.width : element.width);
+        const bottom = element.y + (element.type === 'round' ? element.width : element.height);
+        
+        minX = Math.min(minX, left);
+        minY = Math.min(minY, top);
+        maxX = Math.max(maxX, right);
+        maxY = Math.max(maxY, bottom);
+      });
+      
+      const cropX = Math.max(0, minX - padding);
+      const cropY = Math.max(0, minY - padding);
+      const cropWidth = maxX - minX + (2 * padding);
+      const cropHeight = maxY - minY + (2 * padding);
+      
+      const dataURL = stageRef.current.toDataURL({ 
+        pixelRatio: 2,
+        x: cropX,
+        y: cropY,
+        width: cropWidth,
+        height: cropHeight
+      });
+      
+      // Restore grid elements and selection styling
       gridElements.forEach(element => element.visible(true));
+      
+      // Restore selection styling if there was a selection
+      if (currentSelection) {
+        const selectedShape = layer.findOne(`#${currentSelection}`);
+        if (selectedShape) {
+          selectedShape.stroke('#0066cc');
+          selectedShape.strokeWidth(2);
+        }
+      }
+      
       layer.batchDraw();
       
-      const pdf = new jsPDF('landscape');
-      const imgWidth = 280;
-      const imgHeight = 200;
+      const pdf = new jsPDF(cropWidth > cropHeight ? 'landscape' : 'portrait');
       
-      pdf.addImage(dataURL, 'PNG', 10, 10, imgWidth, imgHeight);
+      // Calculate dimensions to fit the PDF page
+      const pageWidth = pdf.internal.pageSize.getWidth() - 20; // 10px margin on each side
+      const pageHeight = pdf.internal.pageSize.getHeight() - 20;
+      const aspectRatio = cropWidth / cropHeight;
+      
+      let imgWidth, imgHeight;
+      if (aspectRatio > pageWidth / pageHeight) {
+        imgWidth = pageWidth;
+        imgHeight = pageWidth / aspectRatio;
+      } else {
+        imgHeight = pageHeight;
+        imgWidth = pageHeight * aspectRatio;
+      }
+      
+      const centerX = (pdf.internal.pageSize.getWidth() - imgWidth) / 2;
+      const centerY = (pdf.internal.pageSize.getHeight() - imgHeight) / 2;
+      
+      pdf.addImage(dataURL, 'PNG', centerX, centerY, imgWidth, imgHeight);
       pdf.save(`${currentEvent?.title || 'layout'}-layout.pdf`);
     }
   };
@@ -447,9 +603,20 @@ const LayoutDesigner = () => {
             </div>
           </div>
 
-          {savedLayouts.length > 0 && (
-            <div style={styles.sidebarSection}>
+          {/* Saved Layouts Section */}
+          <div style={styles.sidebarSection}>
+            <div style={styles.sectionHeader}>
               <h3>Saved Layouts</h3>
+              <button
+                onClick={newLayout}
+                style={styles.newLayoutButton}
+                title="Create new layout"
+              >
+                + New
+              </button>
+            </div>
+            
+            {savedLayouts.length > 0 && (
               <div style={styles.layoutList}>
                 {savedLayouts.map((layout) => (
                   <div
@@ -475,8 +642,15 @@ const LayoutDesigner = () => {
                   </div>
                 ))}
               </div>
-            </div>
-          )}
+            )}
+            
+            {savedLayouts.length === 0 && (
+              <div style={styles.emptyState}>
+                <p>No saved layouts yet.</p>
+                <p>Create your first layout!</p>
+              </div>
+            )}
+          </div>
         </div>
 
         {/* Canvas */}
@@ -597,6 +771,29 @@ const styles = {
   },
   sidebarSection: {
     marginBottom: '2rem',
+  },
+  sectionHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '1rem',
+  },
+  newLayoutButton: {
+    background: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '6px',
+    fontSize: '0.8rem',
+    cursor: 'pointer',
+    fontWeight: '500',
+    transition: 'background-color 0.2s',
+  },
+  emptyState: {
+    textAlign: 'center',
+    color: '#6b7280',
+    fontSize: '0.9rem',
+    padding: '1rem',
   },
   elementGrid: {
     display: 'grid',

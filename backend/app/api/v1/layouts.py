@@ -4,7 +4,7 @@ from typing import List, Optional
 
 from ...core.database import get_db
 from ...models.models import Layout
-from ...schemas.layout import LayoutCreate, LayoutResponse
+from ...schemas.layout import LayoutCreate, LayoutUpdate
 
 router = APIRouter()
 
@@ -100,6 +100,47 @@ async def get_layout(
         "elements": layout.layout.get("elements", []) if layout.layout else [],
         "created_at": layout.created_at,
         "updated_at": layout.updated_at
+    }
+
+
+@router.put("/{layout_id}")
+async def update_layout(
+    layout_id: int,
+    layout: LayoutUpdate,
+    db: Session = Depends(get_db)
+):
+    """Update a specific layout by ID"""
+    db_layout = db.query(Layout).filter(Layout.layout_id == layout_id).first()
+    
+    if not db_layout:
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="Layout not found"
+        )
+    
+    layout_name = layout.title or layout.name or db_layout.name
+    
+    layout_data = {
+        "elements": layout.elements or []
+    }
+    
+    # Update the layout
+    db_layout.name = layout_name
+    db_layout.layout = layout_data
+    
+    db.commit()
+    db.refresh(db_layout)
+    
+    return {
+        "id": db_layout.layout_id,
+        "layout_id": db_layout.layout_id,
+        "event_id": db_layout.event_id,
+        "name": db_layout.name,
+        "title": db_layout.name,
+        "layout": db_layout.layout,
+        "elements": db_layout.layout.get("elements", []) if db_layout.layout else [],
+        "created_at": db_layout.created_at,
+        "updated_at": db_layout.updated_at
     }
 
 
