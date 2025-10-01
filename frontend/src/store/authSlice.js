@@ -39,10 +39,13 @@ export const loginUser = createAsyncThunk(
   'auth/loginUser',
   async ({ email, password }, { rejectWithValue }) => {
     try {
+      console.log('Attempting login with authAPI...');
       const response = await authAPI.login(email, password);
+      console.log('Login API response:', response);
       storeToken(response.access_token, response.expires_at);
       return response;
     } catch (error) {
+      console.error('Login error:', error);
       return rejectWithValue(parseErrorResponse(error));
     }
   }

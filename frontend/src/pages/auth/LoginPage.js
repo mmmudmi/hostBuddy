@@ -33,13 +33,20 @@ const LoginPage = () => {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    console.log('Login attempt with:', { email: formData.email, password: '***' });
+    
     const result = await dispatch(loginUser({
       email: formData.email,
       password: formData.password,
     }));
     
+    console.log('Login result:', result);
+    
     if (loginUser.fulfilled.match(result)) {
+      console.log('Login successful, navigating to dashboard');
       navigate('/dashboard');
+    } else {
+      console.log('Login failed:', result.payload);
     }
   };
 
@@ -72,6 +79,7 @@ const LoginPage = () => {
               className="form-input"
               required
               placeholder="Enter your email"
+              autoComplete="email"
             />
           </div>
           

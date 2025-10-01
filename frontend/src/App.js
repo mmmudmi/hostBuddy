@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import CreateEvent from './pages/CreateEvent';
 import EventDetails from './pages/EventDetails';
 import LayoutDesigner from './pages/LayoutDesigner';
+import LoginTest from './pages/LoginTest';
 
 // Components
 import Navbar from './components/Navbar';
@@ -71,6 +72,10 @@ function App() {
                 <SignupPage />
               </PublicRoute>
             } 
+          />
+          <Route 
+            path="/login-test" 
+            element={<LoginTest />} 
           />
 
           {/* Private Routes */}

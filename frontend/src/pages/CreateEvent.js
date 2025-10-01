@@ -230,6 +230,7 @@ const CreateEvent = () => {
                     onChange={handleChange}
                     className="form-input"
                     placeholder="Enter event title"
+                    autoComplete="off"
                   />
                   {formErrors.title && (
                     <div style={styles.fieldError}>{formErrors.title}</div>
@@ -248,6 +249,7 @@ const CreateEvent = () => {
                     onChange={handleChange}
                     className="form-input"
                     placeholder="Enter event location"
+                    autoComplete="street-address"
                   />
                   {formErrors.location && (
                     <div style={styles.fieldError}>{formErrors.location}</div>

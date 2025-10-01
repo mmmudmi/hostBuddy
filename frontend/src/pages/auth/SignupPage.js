@@ -121,6 +121,7 @@ const SignupPage = () => {
               className="form-input"
               required
               placeholder="Enter your full name"
+              autoComplete="name"
             />
             {formErrors.full_name && (
               <div style={styles.fieldError}>{formErrors.full_name}</div>
@@ -140,6 +141,7 @@ const SignupPage = () => {
               className="form-input"
               required
               placeholder="Enter your email"
+              autoComplete="email"
             />
             {formErrors.email && (
               <div style={styles.fieldError}>{formErrors.email}</div>
