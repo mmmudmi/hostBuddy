@@ -1,12 +1,14 @@
 from pydantic import BaseModel
 from datetime import datetime
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 
 
 # Layout Schemas
 class LayoutBase(BaseModel):
-    name: str
+    name: Optional[str] = None
+    title: Optional[str] = None  # Add title field to match frontend
     layout: Optional[Dict[str, Any]] = None
+    elements: Optional[List[Dict[str, Any]]] = None  # Add elements field
 
 
 class LayoutCreate(LayoutBase):
@@ -15,11 +17,14 @@ class LayoutCreate(LayoutBase):
 
 class LayoutUpdate(BaseModel):
     name: Optional[str] = None
+    title: Optional[str] = None
     layout: Optional[Dict[str, Any]] = None
+    elements: Optional[List[Dict[str, Any]]] = None
 
 
 class LayoutResponse(LayoutBase):
     layout_id: int
+    id: Optional[int] = None  # Add id alias
     event_id: int
     created_at: datetime
     updated_at: datetime

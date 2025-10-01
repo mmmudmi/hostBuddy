@@ -1,5 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, ARRAY, Date, Time
-from sqlalchemy.dialects.postgresql import JSONB
+from sqlalchemy import Column, Integer, String, DateTime, ForeignKey, Text, Date, Time, JSON
 from sqlalchemy.orm import relationship
 from sqlalchemy.ext.declarative import declarative_base
 from datetime import datetime
@@ -28,7 +27,7 @@ class Event(Base):
     title = Column(String(200), nullable=False)
     description = Column(Text)
     location = Column(String(500))
-    images = Column(ARRAY(String), default=[])
+    images = Column(JSON, default="[]")  # Store as JSON string instead of ARRAY
     start_time = Column(Time)
     end_time = Column(Time)
     start_date = Column(Date)
@@ -47,7 +46,7 @@ class Layout(Base):
     layout_id = Column(Integer, primary_key=True, index=True)
     event_id = Column(Integer, ForeignKey("events.event_id"), nullable=False)
     name = Column(String(200), nullable=False)
-    layout = Column(JSONB)
+    layout = Column(JSON)  # Use generic JSON instead of PostgreSQL-specific JSONB
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
     
