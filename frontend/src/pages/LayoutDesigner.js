@@ -27,29 +27,49 @@ const LayoutDesigner = () => {
   const [isSaving, setIsSaving] = useState(false);
   const [savedLayouts, setSavedLayouts] = useState([]);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
+  const [editingTextId, setEditingTextId] = useState(null);
+  const [editingText, setEditingText] = useState('');
+  const [showColorPicker, setShowColorPicker] = useState(false);
+  const [showBorderControls, setShowBorderControls] = useState(false);
+  
+  // Interactive states for border controls
+  const [hoveredBorderWidth, setHoveredBorderWidth] = useState(null);
+  const [hoveredBorderColor, setHoveredBorderColor] = useState(null);
+  const [selectedBorderWidth, setSelectedBorderWidth] = useState(null);
+  const [selectedBorderColor, setSelectedBorderColor] = useState(null);
+  const [isToggleHovered, setIsToggleHovered] = useState(false);
+  const [isCancelHovered, setIsCancelHovered] = useState(false);
+
+  // Available color options
+  const colorOptions = [
+    '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#fbbf24', '#f97316',
+    '#6366f1', '#ec4899', '#84cc16', '#f43f5e', '#06b6d4', '#8b5cf6', '#374151',
+    '#1f2937', '#ffffff', '#000000', '#6b7280', '#9ca3af', '#d1d5db'
+  ];
 
   // Layout elements available for adding to canvas
   const elementTypes = [
     // Basic Shapes
-    { type: 'round', label: 'Circle', icon: '⭕', defaultWidth: 80, defaultHeight: 80, color: '#8b5cf6' },
-    { type: 'square', label: 'Rectangle', icon: '⬜', defaultWidth: 100, defaultHeight: 60, color: '#8b5cf6' },
-    { type: 'ellipse', label: 'Oval', icon: '⬭', defaultWidth: 120, defaultHeight: 60, color: '#10b981' },
+    { type: 'round', label: 'Circle', icon: '●', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'square', label: 'Square', icon: '■', defaultWidth: 60, defaultHeight: 60, color: '#9ca3af' },
+    { type: 'rectangle', label: 'Rectangle', icon: '▆', defaultWidth: 120, defaultHeight: 60, color: '#9ca3af' },
+    { type: 'ellipse', label: 'Oval', icon: '⬬', defaultWidth: 120, defaultHeight: 60, color: '#9ca3af' },
     
     // Polygon Shapes
-    { type: 'triangle', label: 'Triangle', icon: '🔺', defaultWidth: 80, defaultHeight: 80, color: '#f59e0b' },
-    { type: 'hexagon', label: 'Hexagon', icon: '⬢', defaultWidth: 80, defaultHeight: 80, color: '#ef4444' },
-    { type: 'pentagon', label: 'Pentagon', icon: '⬟', defaultWidth: 80, defaultHeight: 80, color: '#06b6d4' },
-    { type: 'octagon', label: 'Octagon', icon: '⯄', defaultWidth: 80, defaultHeight: 80, color: '#8b5cf6' },
+    { type: 'triangle', label: 'Triangle', icon: '▲', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'hexagon', label: 'Hexagon', icon: '⬢', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'pentagon', label: 'Pentagon', icon: '⬟', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'octagon', label: 'Octagon', icon: '⬢', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     
     // Special Shapes
-    { type: 'star', label: 'Star', icon: '⭐', defaultWidth: 80, defaultHeight: 80, color: '#fbbf24' },
-    { type: 'arc', label: 'Arc', icon: '◗', defaultWidth: 100, defaultHeight: 100, color: '#f97316' },
+    { type: 'star', label: 'Star', icon: '★', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
     
     // Lines and Dividers
-    { type: 'line', label: 'Line', icon: '📏', defaultWidth: 100, defaultHeight: 2, color: '#374151' },
+    { type: 'line', label: 'Line', icon: '━', defaultWidth: 100, defaultHeight: 2, color: '#9ca3af' },
     
     // Text and Labels
-    { type: 'text', label: 'Text', icon: '📝', defaultWidth: 100, defaultHeight: 30, color: '#1f2937' },
+    { type: 'text', label: 'Text', icon: '✎', defaultWidth: 100, defaultHeight: 30, color: '#9ca3af' },
   ];
 
   const loadLayouts = useCallback(async () => {
@@ -65,6 +85,36 @@ const LayoutDesigner = () => {
       setSavedLayouts(eventLayouts);
     }
   }, [id]);
+
+  // Add CSS animations to document head
+  useEffect(() => {
+    const style = document.createElement('style');
+    style.textContent = `
+      @keyframes fadeIn {
+        from { opacity: 0; }
+        to { opacity: 1; }
+      }
+      
+      @keyframes slideIn {
+        from { 
+          opacity: 0;
+          transform: translateY(-20px) scale(0.95);
+        }
+        to { 
+          opacity: 1;
+          transform: translateY(0) scale(1);
+        }
+      }
+      
+      @keyframes pulse {
+        0% { transform: scale(1); }
+        50% { transform: scale(1.05); }
+        100% { transform: scale(1); }
+      }
+    `;
+    document.head.appendChild(style);
+    return () => document.head.removeChild(style);
+  }, []);
 
   useEffect(() => {
     if (id) {
@@ -294,6 +344,142 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, []);
 
+  // Start editing text
+  const startTextEdit = useCallback((elementId) => {
+    const element = layoutElements.find(el => el.id === elementId);
+    if (element) {
+      setEditingTextId(elementId);
+      // For text elements, use existing text; for other elements, start with existing text or empty
+      if (element.type === 'text') {
+        setEditingText(element.text || element.label || 'Text');
+      } else {
+        setEditingText(element.text || '');
+      }
+    }
+  }, [layoutElements]);
+
+  // Finish editing text
+  const finishTextEdit = useCallback(() => {
+    if (editingTextId) {
+      const trimmedText = editingText.trim();
+      if (trimmedText) {
+        updateElement(editingTextId, { text: trimmedText });
+      } else {
+        // Remove text property if empty
+        updateElement(editingTextId, { text: undefined });
+      }
+      setEditingTextId(null);
+      setEditingText('');
+    }
+  }, [editingTextId, editingText, updateElement]);
+
+  // Cancel text editing
+  const cancelTextEdit = useCallback(() => {
+    setEditingTextId(null);
+    setEditingText('');
+  }, []);
+
+  // Change color of selected elements
+  const changeElementColor = useCallback((newColor) => {
+    if (isMultiSelect && selectedIds.length > 0) {
+      // Change color of multiple selected elements
+      setLayoutElements(prev => 
+        prev.map(element => 
+          selectedIds.includes(element.id) 
+            ? { ...element, color: newColor }
+            : element
+        )
+      );
+    } else if (selectedId) {
+      // Change color of single selected element
+      updateElement(selectedId, { color: newColor });
+    }
+    setShowColorPicker(false);
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect, updateElement]);
+
+  // Toggle border for selected elements
+  const toggleElementBorder = useCallback(() => {
+    if (isMultiSelect && selectedIds.length > 0) {
+      // Toggle border for multiple selected elements
+      setLayoutElements(prev => 
+        prev.map(element => {
+          if (selectedIds.includes(element.id)) {
+            const hasBorder = element.borderWidth && element.borderWidth > 0;
+            return {
+              ...element,
+              borderWidth: hasBorder ? 0 : 2,
+              // If turning on border, use existing color or default to blue
+              // If turning off border, clear the color to avoid artifacts
+              borderColor: hasBorder ? undefined : (element.borderColor || '#3b82f6')
+            };
+          }
+          return element;
+        })
+      );
+    } else if (selectedId) {
+      // Toggle border for single selected element
+      const element = layoutElements.find(el => el.id === selectedId);
+      if (element) {
+        const hasBorder = element.borderWidth && element.borderWidth > 0;
+        updateElement(selectedId, { 
+          borderWidth: hasBorder ? 0 : 2,
+          // If turning on border, use existing color or default to blue
+          // If turning off border, clear the color to avoid artifacts
+          borderColor: hasBorder ? undefined : (element.borderColor || '#3b82f6')
+        });
+      }
+    }
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect, updateElement, layoutElements]);
+
+  // Change border width
+  const changeBorderWidth = useCallback((width) => {
+    if (isMultiSelect && selectedIds.length > 0) {
+      setLayoutElements(prev => 
+        prev.map(element => {
+          if (selectedIds.includes(element.id)) {
+            return { 
+              ...element, 
+              borderWidth: width,
+              // If setting width to 0, clear border color to avoid black remnants
+              // If setting width > 0, ensure there's a visible border color
+              borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
+            };
+          }
+          return element;
+        })
+      );
+    } else if (selectedId) {
+      const element = layoutElements.find(el => el.id === selectedId);
+      if (element) {
+        updateElement(selectedId, { 
+          borderWidth: width,
+          // If setting width to 0, clear border color to avoid black remnants
+          // If setting width > 0, ensure there's a visible border color
+          borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
+        });
+      }
+    }
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect, updateElement, layoutElements]);
+
+  // Change border color
+  const changeBorderColor = useCallback((color) => {
+    if (isMultiSelect && selectedIds.length > 0) {
+      setLayoutElements(prev => 
+        prev.map(element => 
+          selectedIds.includes(element.id) 
+            ? { ...element, borderColor: color }
+            : element
+        )
+      );
+    } else if (selectedId) {
+      updateElement(selectedId, { borderColor: color });
+    }
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect, updateElement]);
+
   const deleteElement = useCallback(() => {
     if (isMultiSelect && selectedIds.length > 0) {
       // Delete multiple selected elements (temporary group)
@@ -483,6 +669,11 @@ const LayoutDesigner = () => {
 
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
+    // Don't handle shortcuts when editing text
+    if (editingTextId) {
+      return;
+    }
+    
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
     
     if (isCtrlOrCmd && event.key.toLowerCase() === 'g') {
@@ -517,7 +708,7 @@ const LayoutDesigner = () => {
       event.preventDefault();
       deleteElement();
     }
-  }, [groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements]);
+  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -970,8 +1161,18 @@ const LayoutDesigner = () => {
       width: element.width,
       height: element.height,
       fill: element.color,
-      stroke: isSelected ? '#0066cc' : (isInTempGroup ? '#3b82f6' : 'transparent'),
-      strokeWidth: isSelected ? 2 : (isInTempGroup ? 1 : 0),
+      stroke: isSelected 
+        ? '#0066cc' 
+        : (isInTempGroup 
+          ? '#3b82f6' 
+          : (element.borderWidth && element.borderWidth > 0 && element.borderColor
+            ? element.borderColor 
+            : 'transparent')),
+      strokeWidth: isSelected 
+        ? 2 
+        : (isInTempGroup 
+          ? 1 
+          : (element.borderWidth || 0)),
       draggable: true,
       onDragStart: handleDragStart,
       onDragMove: handleDragMove,
@@ -990,6 +1191,8 @@ const LayoutDesigner = () => {
           radius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     } 
@@ -1001,6 +1204,8 @@ const LayoutDesigner = () => {
           radiusY={element.height / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1012,6 +1217,8 @@ const LayoutDesigner = () => {
           radius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1023,6 +1230,8 @@ const LayoutDesigner = () => {
           radius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1034,6 +1243,8 @@ const LayoutDesigner = () => {
           radius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1045,6 +1256,8 @@ const LayoutDesigner = () => {
           radius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1057,6 +1270,8 @@ const LayoutDesigner = () => {
           outerRadius={element.width / 2}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1069,6 +1284,8 @@ const LayoutDesigner = () => {
           angle={180}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1082,6 +1299,8 @@ const LayoutDesigner = () => {
           fill={undefined}
           width={undefined}
           height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1096,6 +1315,8 @@ const LayoutDesigner = () => {
           height={element.height}
           align="center"
           verticalAlign="middle"
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
         />
       );
     }
@@ -1121,6 +1342,8 @@ const LayoutDesigner = () => {
         onDragEnd: handleGroupDragEnd,
         onClick: (e) => handleSelect(element.id, e.evt),
         onTap: (e) => handleSelect(element.id, e.evt),
+        onDblClick: () => startTextEdit(element.id),
+        onDblTap: () => startTextEdit(element.id),
       };
 
       // Render group as a container with its children
@@ -1184,30 +1407,42 @@ const LayoutDesigner = () => {
     }
     else {
       // Default to rectangle for square and any unknown types
-      shape = <Rect {...shapeProps} />;
+      shape = <Rect {...shapeProps} onDblClick={() => startTextEdit(element.id)} onDblTap={() => startTextEdit(element.id)} />;
     }
 
     return (
       <React.Fragment key={element.id}>
         {shape}
-        {element.type !== 'text' && element.type !== 'line' && element.type !== 'group' && (
+        {element.type !== 'text' && element.type !== 'line' && element.type !== 'group' && element.text && (
           <Text
-            x={element.x + (
-              ['round', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(element.type) 
-                ? -element.width/4 
-                : element.width/2 - 20
-            )}
-            y={element.y + (
-              ['round', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(element.type)
-                ? -5 
-                : element.height/2 - 5
-            )}
-            text={element.label}
-            fontSize={12}
+            x={
+              // For centered shapes (circles, polygons, stars, arcs), x is already the center
+              ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(element.type)
+                ? element.x
+                : element.x + element.width / 2  // For rectangles, x is top-left, so add half width
+            }
+            y={
+              // For centered shapes, y is already the center
+              ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(element.type)
+                ? element.y
+                : element.y + element.height / 2  // For rectangles, y is top-left, so add half height
+            }
+            text={element.text}
+            fontSize={14}
             fill="white"
             fontStyle="bold"
             align="center"
+            verticalAlign="middle"
+            width={100}  // Set a width for the text area
+            height={30}  // Set a height for the text area
+            offsetX={50}  // Offset by half the width to center horizontally
+            offsetY={15}  // Offset by half the height to center vertically
             listening={false}
+            // Add text shadow for better visibility
+            shadowColor="rgba(0, 0, 0, 0.5)"
+            shadowBlur={2}
+            shadowOffsetX={0.2}
+            shadowOffsetY={0.2}
           />
         )}
       </React.Fragment>
@@ -1276,33 +1511,104 @@ const LayoutDesigner = () => {
           {hasUnsavedChanges && (
             <span style={styles.unsavedIndicator}>●</span>
           )}
-          <button 
-            onClick={saveLayout}
-            disabled={isSaving}
-            className="btn btn-primary btn-small"
-          >
-            {isSaving ? 'Saving...' : 'Save Layout'}
-          </button>
-          <button 
-            onClick={exportToPNG}
-            className="btn btn-secondary btn-small"
-          >
-            Export PNG
-          </button>
-          <button 
-            onClick={exportToPDF}
-            className="btn btn-secondary btn-small"
-          >
-            Export PDF
-          </button>
-          <button 
-            onClick={clearLayout}
-            className="btn btn-danger btn-small"
-          >
-            Clear All
-          </button>
+          {/* Hide these buttons when objects are selected */}
+          {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
+            <>
+              <button 
+                onClick={saveLayout}
+                disabled={isSaving}
+                className="btn btn-primary btn-small"
+              >
+                {isSaving ? 'Saving...' : 'Save Layout'}
+              </button>
+              <button 
+                onClick={exportToPNG}
+                className="btn btn-secondary btn-small"
+              >
+                Export PNG
+              </button>
+              <button 
+                onClick={exportToPDF}
+                className="btn btn-secondary btn-small"
+              >
+                Export PDF
+              </button>
+              <button 
+                onClick={clearLayout}
+                className="btn btn-danger btn-small"
+              >
+                Clear All
+              </button>
+            </>
+          )}
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
+              <button 
+                onClick={() => {
+                  setShowColorPicker(!showColorPicker);
+                  // Add visual feedback
+                  const button = document.activeElement;
+                  if (button) {
+                    button.style.transform = 'scale(0.95)';
+                    button.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+                    setTimeout(() => {
+                      button.style.transform = 'scale(1)';
+                      button.style.boxShadow = '';
+                    }, 150);
+                  }
+                }}
+                className="btn btn-info btn-small"
+                title="Change color - Click to pick a new color for selected objects"
+                style={{ 
+                  position: 'relative',
+                  transition: 'all 0.2s ease',
+                  backgroundColor: showColorPicker ? '#10b981' : '',
+                  transform: 'scale(1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '';
+                }}
+              >
+                🎨 Color
+              </button>
+              <button 
+                onClick={() => {
+                  setShowBorderControls(!showBorderControls);
+                  // Add visual feedback
+                  const button = document.activeElement;
+                  if (button) {
+                    button.style.transform = 'scale(0.95)';
+                    button.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
+                    setTimeout(() => {
+                      button.style.transform = 'scale(1)';
+                      button.style.boxShadow = '';
+                    }, 150);
+                  }
+                }}
+                className="btn btn-secondary btn-small"
+                title="Border settings - Click to add borders to selected objects"
+                style={{
+                  transition: 'all 0.2s ease',
+                  backgroundColor: showBorderControls ? '#3b82f6' : '',
+                  color: showBorderControls ? 'white' : '',
+                  transform: 'scale(1)',
+                }}
+                onMouseEnter={(e) => {
+                  e.target.style.transform = 'scale(1.05)';
+                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
+                }}
+                onMouseLeave={(e) => {
+                  e.target.style.transform = 'scale(1)';
+                  e.target.style.boxShadow = '';
+                }}
+              >
+                🔲 Border
+              </button>
               <button 
                 onClick={cutElements}
                 className="btn btn-secondary btn-small"
@@ -1379,6 +1685,9 @@ const LayoutDesigner = () => {
           <div style={styles.sidebarSection}>
             <h3>Controls & Shortcuts</h3>
             <div style={styles.instructionsBox}>
+              <p style={styles.instructionText}>
+                <strong>Edit Text:</strong> Double-click on text elements
+              </p>
               <p style={styles.instructionText}>
                 <strong>Multi-Select:</strong> Hold Shift + Click (creates temp group)
               </p>
@@ -1568,6 +1877,209 @@ const LayoutDesigner = () => {
           </Stage>
         </div>
       </div>
+
+      {/* Text Editing Modal */}
+      {editingTextId && (
+        <div style={styles.textEditModal}>
+          <div style={styles.textEditBox}>
+            <h3 style={styles.textEditTitle}>Edit Text</h3>
+            <textarea
+              value={editingText}
+              onChange={(e) => setEditingText(e.target.value)}
+              style={styles.textEditInput}
+              placeholder="Enter text for this element (leave empty to remove text)..."
+              autoFocus
+              rows={3}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && !e.shiftKey) {
+                  e.preventDefault();
+                  finishTextEdit();
+                } else if (e.key === 'Escape') {
+                  e.preventDefault();
+                  cancelTextEdit();
+                }
+              }}
+            />
+            <div style={styles.textEditButtons}>
+              <button 
+                onClick={finishTextEdit}
+                style={styles.textEditSaveButton}
+              >
+                Save (Enter)
+              </button>
+              <button 
+                onClick={cancelTextEdit}
+                style={styles.textEditCancelButton}
+              >
+                Cancel (Esc)
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Color Picker Modal */}
+      {showColorPicker && (selectedId || (isMultiSelect && selectedIds.length > 0)) && (
+        <div style={styles.colorPickerModal}>
+          <div style={styles.colorPickerBox}>
+            <h3 style={styles.colorPickerTitle}>Choose Color</h3>
+            <div style={styles.colorGrid}>
+              {colorOptions.map((color, index) => (
+                <div
+                  key={index}
+                  style={{
+                    ...styles.colorOption,
+                    backgroundColor: color,
+                    border: color === '#ffffff' ? '2px solid #e5e7eb' : '2px solid transparent'
+                  }}
+                  onClick={() => changeElementColor(color)}
+                  title={color}
+                />
+              ))}
+            </div>
+            <div style={styles.colorPickerButtons}>
+              <button 
+                onClick={() => setShowColorPicker(false)}
+                style={styles.colorPickerCancelButton}
+              >
+                Cancel
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Border Controls Modal */}
+      {showBorderControls && (selectedId || (isMultiSelect && selectedIds.length > 0)) && (
+        <div style={styles.borderControlsModal}>
+          <div style={styles.borderControlsBox}>
+            <h3 style={styles.borderControlsTitle}>Border Settings</h3>
+            
+            {/* Border Toggle */}
+            <div style={styles.borderSection}>
+              <button 
+                onClick={() => {
+                  toggleElementBorder();
+                  // Add visual feedback
+                  const button = document.activeElement;
+                  if (button) {
+                    button.style.transform = 'scale(0.95)';
+                    setTimeout(() => {
+                      button.style.transform = 'scale(1)';
+                    }, 150);
+                  }
+                }}
+                onMouseEnter={() => setIsToggleHovered(true)}
+                onMouseLeave={() => setIsToggleHovered(false)}
+                style={{
+                  ...styles.borderToggleButton,
+                  ...(isToggleHovered ? styles.borderToggleButtonHover : {})
+                }}
+              >
+                Clear
+              </button>
+            </div>
+
+            {/* Border Width */}
+            <div style={styles.borderSection}>
+              <label style={styles.borderLabel}>Border Width:</label>
+              <div style={styles.borderWidthButtons}>
+                {[1, 2, 3, 4, 5].map(width => {
+                  const isSelected = selectedBorderWidth === width;
+                  const isHovered = hoveredBorderWidth === width;
+                  
+                  return (
+                    <button
+                      key={width}
+                      onClick={() => {
+                        changeBorderWidth(width);
+                        setSelectedBorderWidth(width);
+                        // Add click animation
+                        const button = document.activeElement;
+                        if (button) {
+                          button.style.transform = 'scale(0.9)';
+                          setTimeout(() => {
+                            button.style.transform = isSelected ? 'scale(1.02)' : 'scale(1)';
+                          }, 100);
+                        }
+                      }}
+                      onMouseEnter={() => setHoveredBorderWidth(width)}
+                      onMouseLeave={() => setHoveredBorderWidth(null)}
+                      onFocus={() => setHoveredBorderWidth(width)}
+                      onBlur={() => setHoveredBorderWidth(null)}
+                      style={{
+                        ...styles.borderWidthButton,
+                        ...(isHovered ? styles.borderWidthButtonHover : {}),
+                        ...(isSelected ? styles.borderWidthButtonSelected : {}),
+                        outline: 'none', // Force remove any focus outline
+                        border: isSelected ? '1px solid #3b82f6' : 
+                                isHovered ? '1px solid #9ca3af' : '1px solid #d1d5db',
+                      }}
+                    >
+                      {width}px
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Border Color */}
+            <div style={styles.borderSection}>
+              <label style={styles.borderLabel}>Border Color:</label>
+              <div style={styles.borderColorGrid}>
+                {['#000000', '#ffffff', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6b7280', 
+                  '#ec4899', '#84cc16', '#f43f5e', '#06b6d4', '#fbbf24', '#f97316', '#6366f1', '#9ca3af'].map((color, index) => {
+                  const isSelected = selectedBorderColor === color;
+                  const isHovered = hoveredBorderColor === index;
+                  
+                  return (
+                    <div
+                      key={index}
+                      style={{
+                        ...styles.borderColorOption,
+                        backgroundColor: color,
+                        border: color === '#ffffff' ? '2px solid #e5e7eb' : 
+                                isSelected ? '2px solid #374151' : '2px solid transparent',
+                        ...(isHovered ? styles.borderColorOptionHover : {}),
+                        ...(isSelected ? styles.borderColorOptionSelected : {})
+                      }}
+                      onClick={() => {
+                        changeBorderColor(color);
+                        setSelectedBorderColor(color);
+                        // Add ripple effect
+                        const element = document.activeElement;
+                        if (element) {
+                          element.style.transform = 'scale(0.8)';
+                          setTimeout(() => {
+                            element.style.transform = 'scale(1.1)';
+                          }, 100);
+                        }
+                      }}
+                      onMouseEnter={() => setHoveredBorderColor(index)}
+                      onMouseLeave={() => setHoveredBorderColor(null)}
+                      title={`Border Color: ${color}`}
+                    />
+                  );
+                })}
+              </div>
+            </div>
+
+            <div style={styles.borderControlsButtons}>
+              <button 
+                onClick={() => setShowBorderControls(false)}
+                onMouseEnter={() => setIsCancelHovered(true)}
+                onMouseLeave={() => setIsCancelHovered(false)}
+                style={{
+                  ...styles.borderControlsCancelButton,
+                  ...(isCancelHovered ? styles.borderControlsCancelButtonHover : {})
+                }}
+              >
+                Close
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -1740,6 +2252,288 @@ const styles = {
     justifyContent: 'center',
     alignItems: 'flex-start',
     padding: '1rem',
+  },
+  textEditModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  textEditBox: {
+    backgroundColor: 'white',
+    padding: '2rem',
+    borderRadius: '12px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    minWidth: '400px',
+    maxWidth: '500px',
+  },
+  textEditTitle: {
+    margin: '0 0 1rem 0',
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    color: '#1f2937',
+    textAlign: 'center',
+  },
+  textEditInput: {
+    width: '100%',
+    padding: '0.75rem',
+    border: '2px solid #e5e7eb',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontFamily: 'inherit',
+    resize: 'vertical',
+    minHeight: '80px',
+    outline: 'none',
+    transition: 'border-color 0.2s',
+    boxSizing: 'border-box',
+  },
+  textEditButtons: {
+    display: 'flex',
+    gap: '0.75rem',
+    marginTop: '1.5rem',
+    justifyContent: 'center',
+  },
+  textEditSaveButton: {
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  textEditCancelButton: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  colorPickerModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+  },
+  colorPickerBox: {
+    backgroundColor: 'white',
+    padding: '2rem',
+    borderRadius: '12px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    minWidth: '320px',
+    maxWidth: '400px',
+  },
+  colorPickerTitle: {
+    margin: '0 0 1.5rem 0',
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    color: '#1f2937',
+    textAlign: 'center',
+  },
+  colorGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(5, 1fr)',
+    gap: '0.75rem',
+    marginBottom: '1.5rem',
+  },
+  colorOption: {
+    width: '40px',
+    height: '40px',
+    borderRadius: '8px',
+    cursor: 'pointer',
+    transition: 'transform 0.2s, box-shadow 0.2s',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+  },
+  colorPickerButtons: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: '1.5rem',
+  },
+  colorPickerCancelButton: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'background-color 0.2s',
+  },
+  borderControlsModal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    justifyContent: 'center',
+    alignItems: 'center',
+    zIndex: 1000,
+    animation: 'fadeIn 0.2s ease-out',
+  },
+  borderControlsBox: {
+    backgroundColor: 'white',
+    padding: '2rem',
+    borderRadius: '12px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+    minWidth: '320px',
+    maxWidth: '400px',
+    animation: 'slideIn 0.3s ease-out',
+    transform: 'scale(1)',
+  },
+  borderControlsTitle: {
+    margin: '0 0 1.5rem 0',
+    fontSize: '1.25rem',
+    fontWeight: 'bold',
+    color: '#1f2937',
+    textAlign: 'center',
+  },
+  borderSection: {
+    marginBottom: '1.5rem',
+  },
+  borderLabel: {
+    display: 'block',
+    fontSize: '0.9rem',
+    fontWeight: '600',
+    color: '#374151',
+    marginBottom: '0.75rem',
+  },
+  borderToggleButton: {
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    width: '100%',
+    transform: 'scale(1)',
+  },
+  borderToggleButtonHover: {
+    backgroundColor: '#2563eb',
+    transform: 'scale(1.02)',
+    boxShadow: '0 4px 8px rgba(59, 130, 246, 0.3)',
+  },
+  borderToggleButtonActive: {
+    transform: 'scale(0.98)',
+    backgroundColor: '#1d4ed8',
+  },
+  borderWidthButtons: {
+    display: 'flex',
+    gap: '0.5rem',
+    flexWrap: 'wrap',
+  },
+  borderWidthButton: {
+    backgroundColor: '#f3f4f6',
+    color: '#374151',
+    border: '1px solid #d1d5db',
+    padding: '0.5rem 0.75rem',
+    borderRadius: '6px',
+    fontSize: '0.9rem',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    transform: 'scale(1)',
+    minWidth: '40px',
+    textAlign: 'center',
+    outline: 'none', // Remove focus outline
+    '&:focus': {
+      outline: 'none',
+      boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.3)',
+    },
+    '&:active': {
+      outline: 'none',
+    },
+  },
+  borderWidthButtonHover: {
+    backgroundColor: '#e5e7eb',
+    borderColor: '#9ca3af',
+    transform: 'scale(1.05)',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+  },
+  borderWidthButtonActive: {
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    borderColor: '#3b82f6',
+    transform: 'scale(1.02)',
+  },
+  borderWidthButtonSelected: {
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    borderColor: '#3b82f6',
+    boxShadow: '0 0 0 2px rgba(59, 130, 246, 0.3)',
+  },
+  borderColorGrid: {
+    display: 'grid',
+    gridTemplateColumns: 'repeat(4, 1fr)',
+    gap: '0.5rem',
+  },
+  borderColorOption: {
+    width: '30px',
+    height: '30px',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    transform: 'scale(1)',
+    border: '2px solid transparent',
+  },
+  borderColorOptionHover: {
+    transform: 'scale(1.15)',
+    boxShadow: '0 4px 8px rgba(0, 0, 0, 0.2)',
+    zIndex: 10,
+  },
+  borderColorOptionActive: {
+    transform: 'scale(1.1)',
+    boxShadow: '0 6px 12px rgba(0, 0, 0, 0.25)',
+  },
+  borderColorOptionSelected: {
+    border: '2px solid #374151',
+    transform: 'scale(1.1)',
+    boxShadow: '0 0 0 2px rgba(55, 65, 81, 0.3)',
+  },
+  borderControlsButtons: {
+    display: 'flex',
+    justifyContent: 'center',
+    marginTop: '1.5rem',
+  },
+  borderControlsCancelButton: {
+    backgroundColor: '#6b7280',
+    color: 'white',
+    border: 'none',
+    padding: '0.75rem 1.5rem',
+    borderRadius: '8px',
+    fontSize: '1rem',
+    fontWeight: '500',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    transform: 'scale(1)',
+  },
+  borderControlsCancelButtonHover: {
+    backgroundColor: '#4b5563',
+    transform: 'scale(1.02)',
+    boxShadow: '0 4px 8px rgba(107, 114, 128, 0.3)',
   },
 };
 
