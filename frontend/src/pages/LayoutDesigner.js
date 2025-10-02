@@ -21,6 +21,7 @@ const LayoutDesigner = () => {
   const [isMultiSelect, setIsMultiSelect] = useState(false);
   const [isShiftHeld, setIsShiftHeld] = useState(false);
   const [tempGroupBounds, setTempGroupBounds] = useState(null);
+  const [isDragging, setIsDragging] = useState(false);
   const [clipboard, setClipboard] = useState([]);
   const [clipboardOperation, setClipboardOperation] = useState(null); // 'cut' or 'copy'
   const [layoutTitle, setLayoutTitle] = useState('');
@@ -341,12 +342,12 @@ const LayoutDesigner = () => {
     });
   }, [layoutElements, getElementVisualBounds]);
 
-  // Update temp group bounds when elements change position
+  // Update temp group bounds only when selection changes (not when elements move)
   useEffect(() => {
-    if (isMultiSelect && selectedIds.length > 1) {
+    if (isMultiSelect && selectedIds.length > 1 && !isDragging) {
       updateTempGroupBounds(selectedIds);
     }
-  }, [layoutElements, isMultiSelect, selectedIds, updateTempGroupBounds]);
+  }, [isMultiSelect, selectedIds, updateTempGroupBounds, isDragging]);
 
   const updateElement = useCallback((id, updates) => {
     setLayoutElements(prev => 
@@ -1083,6 +1084,7 @@ const LayoutDesigner = () => {
     
     const handleDragStart = (e) => {
       if (isInTempGroup) {
+        setIsDragging(true);
         // Store initial positions for group movement
         const initialPositions = {};
         selectedIds.forEach(id => {
@@ -1092,6 +1094,11 @@ const LayoutDesigner = () => {
           }
         });
         e.target.setAttr('groupInitialPositions', initialPositions);
+        
+        // Store initial bounds to keep them fixed during drag
+        if (tempGroupBounds) {
+          e.target.setAttr('initialGroupBounds', { ...tempGroupBounds });
+        }
       }
     };
 
@@ -1103,6 +1110,16 @@ const LayoutDesigner = () => {
         
         // Get initial positions stored at drag start
         const initialPositions = e.target.getAttr('groupInitialPositions');
+        
+        // Update the bounds position to follow the drag
+        const initialBounds = e.target.getAttr('initialGroupBounds');
+        if (initialBounds) {
+          setTempGroupBounds({
+            ...initialBounds,
+            x: initialBounds.x + deltaX,
+            y: initialBounds.y + deltaY
+          });
+        }
         
         // Update positions of all OTHER elements in the temporary group
         // maintaining their relative distances
@@ -1123,6 +1140,7 @@ const LayoutDesigner = () => {
 
     const handleDragEnd = (e) => {
       if (isInTempGroup) {
+        setIsDragging(false);
         // Calculate final delta movement
         const deltaX = e.target.x() - element.x;
         const deltaY = e.target.y() - element.y;
@@ -1156,6 +1174,7 @@ const LayoutDesigner = () => {
         
         // Clean up
         e.target.setAttr('groupInitialPositions', null);
+        e.target.setAttr('initialGroupBounds', null);
       } else {
         // Single element movement
         updateElement(element.id, {
