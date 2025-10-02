@@ -153,40 +153,53 @@ const LayoutDesigner = () => {
   const handleSelect = (id, event) => {
     const isShift = event?.shiftKey;
     
-    if (isShift || isShiftHeld) {
-      // Multi-select mode with temporary grouping
-      setIsMultiSelect(true);
-      setSelectedIds(prev => {
-        let newSelection;
-        if (prev.includes(id)) {
-          // Remove from selection if already selected
-          newSelection = prev.filter(selectedId => selectedId !== id);
-          if (newSelection.length === 0) {
-            setIsMultiSelect(false);
-            setSelectedId(null);
-            setTempGroupBounds(null);
-          } else if (newSelection.length === 1) {
-            setSelectedId(newSelection[0]);
-            setIsMultiSelect(false);
+    if (isShift) {
+      // Multi-select mode: add to existing selection
+      if (selectedId && !isMultiSelect) {
+        // Convert single selection to multi-select
+        setIsMultiSelect(true);
+        setSelectedIds([selectedId, id]);
+        setSelectedId(null);
+        updateTempGroupBounds([selectedId, id]);
+      } else if (isMultiSelect) {
+        // Add/remove from existing multi-selection
+        setSelectedIds(prev => {
+          let newSelection;
+          if (prev.includes(id)) {
+            // Remove from selection if already selected
+            newSelection = prev.filter(selectedId => selectedId !== id);
+            if (newSelection.length === 0) {
+              setIsMultiSelect(false);
+              setSelectedId(null);
+              setTempGroupBounds(null);
+            } else if (newSelection.length === 1) {
+              setSelectedId(newSelection[0]);
+              setIsMultiSelect(false);
+              setTempGroupBounds(null);
+            }
+          } else {
+            // Add to selection
+            newSelection = [...prev, id];
+          }
+          
+          // Update temporary group bounds
+          if (newSelection.length > 1) {
+            updateTempGroupBounds(newSelection);
+          } else {
             setTempGroupBounds(null);
           }
-        } else {
-          // Add to selection
-          newSelection = [...prev, id];
-        }
-        
-        // Update temporary group bounds
-        if (newSelection.length > 1) {
-          updateTempGroupBounds(newSelection);
-        } else {
-          setTempGroupBounds(null);
-        }
-        
-        return newSelection;
-      });
-      setSelectedId(null); // Clear single selection in multi-select mode
+          
+          return newSelection;
+        });
+      } else {
+        // No existing selection, start with this object
+        setSelectedId(id);
+        setSelectedIds([]);
+        setIsMultiSelect(false);
+        setTempGroupBounds(null);
+      }
     } else {
-      // Single select mode
+      // Normal click - single select mode (clears any existing selection)
       setSelectedId(id);
       setSelectedIds([]);
       setIsMultiSelect(false);
@@ -508,7 +521,6 @@ const LayoutDesigner = () => {
     }
     
     if (elementsToCut.length === 0) {
-      alert('No elements selected to cut');
       return;
     }
     
@@ -538,7 +550,6 @@ const LayoutDesigner = () => {
     }
     
     if (elementsToCopy.length === 0) {
-      alert('No elements selected to copy');
       return;
     }
     
@@ -549,7 +560,6 @@ const LayoutDesigner = () => {
   // Paste elements from clipboard
   const pasteElements = useCallback(() => {
     if (clipboard.length === 0) {
-      alert('Nothing to paste');
       return;
     }
     
@@ -587,7 +597,6 @@ const LayoutDesigner = () => {
   // Group selected elements
   const groupElements = useCallback(() => {
     if (selectedIds.length < 2) {
-      alert('Please select at least 2 elements to group');
       return;
     }
 
@@ -638,13 +647,11 @@ const LayoutDesigner = () => {
   // Ungroup selected group
   const ungroupElements = useCallback(() => {
     if (!selectedId) {
-      alert('Please select a group to ungroup');
       return;
     }
 
     const groupElement = layoutElements.find(element => element.id === selectedId);
     if (!groupElement || groupElement.type !== 'group') {
-      alert('Selected element is not a group');
       return;
     }
 
@@ -674,6 +681,20 @@ const LayoutDesigner = () => {
       return;
     }
     
+    // Check if the user is currently typing in an input field or textarea
+    const activeElement = document.activeElement;
+    const isTypingInInput = activeElement && (
+      activeElement.tagName === 'INPUT' || 
+      activeElement.tagName === 'TEXTAREA' || 
+      activeElement.contentEditable === 'true' ||
+      activeElement.isContentEditable
+    );
+    
+    // If user is typing in an input field, allow normal browser behavior
+    if (isTypingInInput) {
+      return;
+    }
+    
     const isCtrlOrCmd = event.ctrlKey || event.metaKey;
     
     if (isCtrlOrCmd && event.key.toLowerCase() === 'g') {
@@ -687,28 +708,36 @@ const LayoutDesigner = () => {
       }
     }
     
-    // Clipboard operations
+    // Clipboard operations - only prevent default if we have elements selected
     if (isCtrlOrCmd && event.key.toLowerCase() === 'x') {
-      event.preventDefault();
-      cutElements();
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        cutElements();
+      }
     }
     
     if (isCtrlOrCmd && event.key.toLowerCase() === 'c') {
-      event.preventDefault();
-      copyElements();
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        copyElements();
+      }
     }
     
     if (isCtrlOrCmd && event.key.toLowerCase() === 'v') {
-      event.preventDefault();
-      pasteElements();
+      if (clipboard.length > 0) {
+        event.preventDefault();
+        pasteElements();
+      }
     }
     
-    // Delete key
+    // Delete key - only prevent default if we have elements selected
     if (event.key === 'Delete' || event.key === 'Backspace') {
-      event.preventDefault();
-      deleteElement();
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        deleteElement();
+      }
     }
-  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements]);
+  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements, selectedId, selectedIds, isMultiSelect, clipboard.length]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -1488,29 +1517,32 @@ const LayoutDesigner = () => {
             ← Back to Event
           </Link>
           <h2 style={styles.eventTitle}>
-            {currentEvent.title} - Layout Designer
+            {currentEvent.title} - Layout
           </h2>
         </div>
         
         <div style={styles.toolbarRight}>
-          <input
-            type="text"
-            placeholder="Layout title..."
-            value={layoutTitle}
-            onChange={(e) => {
-              setLayoutTitle(e.target.value);
-              setHasUnsavedChanges(true);
-            }}
-            style={{
-              ...styles.titleInput,
-              borderColor: hasUnsavedChanges ? '#f59e0b' : '#d1d5db',
-              backgroundColor: hasUnsavedChanges ? '#fefcbf' : 'white'
-            }}
-            autoComplete="off"
-          />
-          {hasUnsavedChanges && (
-            <span style={styles.unsavedIndicator}>●</span>
+          {/* Hide layout title input when objects are selected */}
+          {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
+            <input
+              type="text"
+              placeholder="Layout title..."
+              value={layoutTitle}
+              onChange={(e) => {
+                setLayoutTitle(e.target.value);
+                setHasUnsavedChanges(true);
+              }}
+              style={{
+                ...styles.titleInput,
+                borderColor: hasUnsavedChanges ? '#f59e0b' : '#d1d5db',
+                backgroundColor: hasUnsavedChanges ? '#fefcbf' : 'white'
+              }}
+              autoComplete="off"
+            />
           )}
+          {/* {hasUnsavedChanges && (
+            <span style={styles.unsavedIndicator}>●</span>
+          )} */}
           {/* Hide these buttons when objects are selected */}
           {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
@@ -1590,7 +1622,7 @@ const LayoutDesigner = () => {
                     }, 150);
                   }
                 }}
-                className="btn btn-secondary btn-small"
+                className="btn btn-info btn-small"
                 title="Border settings - Click to add borders to selected objects"
                 style={{
                   transition: 'all 0.2s ease',
