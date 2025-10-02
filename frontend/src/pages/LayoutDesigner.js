@@ -33,12 +33,15 @@ const LayoutDesigner = () => {
   const [editingChildElement, setEditingChildElement] = useState(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBorderControls, setShowBorderControls] = useState(false);
+  const [showExportDropdown, setShowExportDropdown] = useState(false);
+  const [showStyleControls, setShowStyleControls] = useState(false);
   
   // Interactive states for border controls
   const [hoveredBorderWidth, setHoveredBorderWidth] = useState(null);
   const [hoveredBorderColor, setHoveredBorderColor] = useState(null);
-  const [selectedBorderWidth, setSelectedBorderWidth] = useState(null);
+  const [selectedBorderWidth, setSelectedBorderWidth] = useState(0);
   const [selectedBorderColor, setSelectedBorderColor] = useState(null);
+  const [selectedColor, setSelectedColor] = useState('#9ca3af');
   const [isToggleHovered, setIsToggleHovered] = useState(false);
   const [isCancelHovered, setIsCancelHovered] = useState(false);
 
@@ -152,8 +155,9 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
     
     // Clear any persistent border control states when adding new elements
-    setSelectedBorderWidth(null);
+    setSelectedBorderWidth(0);
     setSelectedBorderColor(null);
+    setSelectedColor('#9ca3af');
     setHoveredBorderWidth(null);
     setHoveredBorderColor(null);
   };
@@ -170,8 +174,9 @@ const LayoutDesigner = () => {
         setSelectedId(null);
         updateTempGroupBounds([selectedId, id]);
         // Clear border control states for multi-selection
-        setSelectedBorderWidth(null);
+        setSelectedBorderWidth(0);
         setSelectedBorderColor(null);
+        setSelectedColor('#9ca3af');
       } else if (isMultiSelect) {
         // Add/remove from existing multi-selection
         setSelectedIds(prev => {
@@ -191,8 +196,9 @@ const LayoutDesigner = () => {
               // Update border control states for single selection
               const selectedElement = layoutElements.find(el => el.id === newSelection[0]);
               if (selectedElement) {
-                setSelectedBorderWidth(selectedElement.borderWidth || null);
+                setSelectedBorderWidth(selectedElement.borderWidth || 0);
                 setSelectedBorderColor(selectedElement.borderColor || null);
+                setSelectedColor(selectedElement.color || '#9ca3af');
               }
             }
           } else {
@@ -204,8 +210,9 @@ const LayoutDesigner = () => {
           if (newSelection.length > 1) {
             updateTempGroupBounds(newSelection);
             // Clear border control states for multi-selection
-            setSelectedBorderWidth(null);
+            setSelectedBorderWidth(0);
             setSelectedBorderColor(null);
+            setSelectedColor('#9ca3af');
           } else {
             setTempGroupBounds(null);
           }
@@ -222,8 +229,9 @@ const LayoutDesigner = () => {
         // Update border control states to match the selected element's properties
         const selectedElement = layoutElements.find(el => el.id === id);
         if (selectedElement) {
-          setSelectedBorderWidth(selectedElement.borderWidth || null);
+          setSelectedBorderWidth(selectedElement.borderWidth || 0);
           setSelectedBorderColor(selectedElement.borderColor || null);
+          setSelectedColor(selectedElement.color || '#9ca3af');
         }
       }
     } else {
@@ -236,8 +244,9 @@ const LayoutDesigner = () => {
       // Update border control states to match the selected element's properties
       const selectedElement = layoutElements.find(el => el.id === id);
       if (selectedElement) {
-        setSelectedBorderWidth(selectedElement.borderWidth || null);
+        setSelectedBorderWidth(selectedElement.borderWidth || 0);
         setSelectedBorderColor(selectedElement.borderColor || null);
+        setSelectedColor(selectedElement.color || '#9ca3af');
       }
     }
   };
@@ -249,8 +258,9 @@ const LayoutDesigner = () => {
     setTempGroupBounds(null);
     
     // Clear border control states when deselecting
-    setSelectedBorderWidth(null);
+    setSelectedBorderWidth(0);
     setSelectedBorderColor(null);
+    setSelectedColor('#9ca3af');
     setHoveredBorderWidth(null);
     setHoveredBorderColor(null);
     setShowBorderControls(false);
@@ -515,7 +525,7 @@ const LayoutDesigner = () => {
     }
     
     // Clear UI state as well
-    setSelectedBorderWidth(null);
+    setSelectedBorderWidth(0);
     setSelectedBorderColor(null);
     setHasUnsavedChanges(true);
   }, [selectedId, selectedIds, isMultiSelect, updateElement, layoutElements]);
@@ -955,6 +965,23 @@ const LayoutDesigner = () => {
       window.removeEventListener('keyup', handleKeyUp);
     };
   }, [handleKeyDown, handleKeyDownForShift, handleKeyUp]);
+
+  // Close export dropdown when clicking outside
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      // Check if click is outside export dropdown
+      if (showExportDropdown && !event.target.closest('[data-export-dropdown]')) {
+        setShowExportDropdown(false);
+      }
+      // Check if click is outside style dropdown
+      if (showStyleControls && !event.target.closest('[data-style-dropdown]')) {
+        setShowStyleControls(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showExportDropdown, showStyleControls]);
 
   const saveLayout = async () => {
     if (!layoutTitle.trim()) {
@@ -1972,18 +1999,82 @@ const LayoutDesigner = () => {
               >
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
-              <button 
-                onClick={exportToPNG}
-                className="btn btn-secondary btn-small"
-              >
-                Export PNG
-              </button>
-              <button 
-                onClick={exportToPDF}
-                className="btn btn-secondary btn-small"
-              >
-                Export PDF
-              </button>
+              
+              {/* Export Dropdown */}
+              <div style={{ position: 'relative', display: 'inline-block' }} data-export-dropdown>
+                <button 
+                  onClick={() => setShowExportDropdown(!showExportDropdown)}
+                  className="btn btn-secondary btn-small"
+                  style={{
+                    backgroundColor: showExportDropdown ? '#374151' : '',
+                    color: showExportDropdown ? 'white' : '',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  📥 Export ▾
+                </button>
+                
+                {showExportDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '140px',
+                    marginTop: '4px'
+                  }}>
+                    <button
+                      onClick={() => {
+                        exportToPNG();
+                        setShowExportDropdown(false);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        borderRadius: '6px 6px 0 0'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      📷 Export PNG
+                    </button>
+                    <button
+                      onClick={() => {
+                        exportToPDF();
+                        setShowExportDropdown(false);
+                      }}
+                      style={{
+                        display: 'block',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'center',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        borderRadius: '0 0 6px 6px'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                    >
+                      📄 Export PDF
+                    </button>
+                  </div>
+                )}
+              </div>
+              
               <button 
                 onClick={clearLayout}
                 className="btn btn-danger btn-small"
@@ -1994,72 +2085,210 @@ const LayoutDesigner = () => {
           )}
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
-              <button 
-                onClick={() => {
-                  setShowColorPicker(!showColorPicker);
-                  // Add visual feedback
-                  const button = document.activeElement;
-                  if (button) {
-                    button.style.transform = 'scale(0.95)';
-                    button.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
-                    setTimeout(() => {
-                      button.style.transform = 'scale(1)';
-                      button.style.boxShadow = '';
-                    }, 150);
-                  }
-                }}
-                className="btn btn-info btn-small"
-                title="Change color - Click to pick a new color for selected objects"
-                style={{ 
-                  position: 'relative',
-                  transition: 'all 0.2s ease',
-                  backgroundColor: showColorPicker ? '#10b981' : '',
-                  transform: 'scale(1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'scale(1.05)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.boxShadow = '';
-                }}
-              >
-                🎨 Color
-              </button>
-              <button 
-                onClick={() => {
-                  setShowBorderControls(!showBorderControls);
-                  // Add visual feedback
-                  const button = document.activeElement;
-                  if (button) {
-                    button.style.transform = 'scale(0.95)';
-                    button.style.boxShadow = '0 2px 8px rgba(0, 0, 0, 0.2)';
-                    setTimeout(() => {
-                      button.style.transform = 'scale(1)';
-                      button.style.boxShadow = '';
-                    }, 150);
-                  }
-                }}
-                className="btn btn-info btn-small"
-                title="Border settings - Click to add borders to selected objects"
-                style={{
-                  transition: 'all 0.2s ease',
-                  backgroundColor: showBorderControls ? '#3b82f6' : '',
-                  color: showBorderControls ? 'white' : '',
-                  transform: 'scale(1)',
-                }}
-                onMouseEnter={(e) => {
-                  e.target.style.transform = 'scale(1.05)';
-                  e.target.style.boxShadow = '0 4px 12px rgba(0, 0, 0, 0.15)';
-                }}
-                onMouseLeave={(e) => {
-                  e.target.style.transform = 'scale(1)';
-                  e.target.style.boxShadow = '';
-                }}
-              >
-                🔲 Border
-              </button>
+              {/* Combined Style Controls Dropdown */}
+              <div style={{ position: 'relative', display: 'inline-block' }} data-style-dropdown>
+                <button 
+                  onClick={() => setShowStyleControls(!showStyleControls)}
+                  className="btn btn-info btn-small"
+                  title="Style settings - Change color and borders for selected objects"
+                  style={{
+                    backgroundColor: showStyleControls ? '#3b82f6' : '',
+                    color: showStyleControls ? 'white' : '',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  🎨 Style ▾
+                </button>
+                
+                {showStyleControls && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '200px',
+                    marginTop: '4px',
+                    padding: '12px'
+                  }}>
+                    {/* Color Section */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', marginBottom: '6px', display: 'block' }}>Color:</label>
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
+                        {colorOptions.slice(0, 10).map((color, index) => {
+                          const isSelected = selectedColor === color;
+                          
+                          return (
+                            <div
+                              key={index}
+                              style={{
+                                width: '24px',
+                                height: '24px',
+                                backgroundColor: color,
+                                border: color === '#ffffff' ? '2px solid #e5e7eb' : 
+                                        isSelected ? '2px solid #374151' : '2px solid transparent',
+                                borderRadius: '4px',
+                                cursor: 'pointer',
+                                transition: 'all 0.2s ease'
+                              }}
+                              onClick={() => {
+                                changeElementColor(color);
+                                setSelectedColor(color);
+                              }}
+                              onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+                              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                              title={color}
+                            />
+                          );
+                        })}
+                      </div>
+                    </div>
+                    
+                    {/* Border Section */}
+                    <div>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                        <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151' }}>Border:</label>
+                        <button 
+                          onClick={() => {
+                            toggleElementBorder();
+                          }}
+                          style={{
+                            padding: '3px 6px',
+                            fontSize: '10px',
+                            border: '1px solid #d1d5db',
+                            borderRadius: '3px',
+                            backgroundColor: 'white',
+                            cursor: 'pointer'
+                          }}
+                          onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                          onMouseLeave={(e) => e.target.style.backgroundColor = 'white'}
+                        >
+                          Clear
+                        </button>
+                      </div>
+                      
+                      {/* Border Width */}
+                      <div style={{ marginBottom: '8px' }}>
+                        {/* <span style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', display: 'block' }}>Width:</span> */}
+                        <div style={{ display: 'flex', gap: '4px', justifyContent: 'center' }}>
+                          {/* No Border Option */}
+                          <button
+                            onClick={() => {
+                              changeBorderWidth(0);
+                              setSelectedBorderWidth(0);
+                            }}
+                            style={{
+                              padding: '8px 6px',
+                              fontSize: '10px',
+                              border: selectedBorderWidth === 0 ? '1px solid #3b82f6' : '1px solid #d1d5db',
+                              borderRadius: '3px',
+                              backgroundColor: selectedBorderWidth === 0 ? '#dbeafe' : 'white',
+                              cursor: 'pointer',
+                              minWidth: '24px',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center'
+                            }}
+                          >
+                            <div
+                              style={{
+                                width: '12px',
+                                height: '1px',
+                                backgroundColor: '#d1d5db',
+                                position: 'relative'
+                              }}
+                            >
+                              <div
+                                style={{
+                                  position: 'absolute',
+                                  top: '50%',
+                                  left: '50%',
+                                  transform: 'translate(-50%, -50%) rotate(45deg)',
+                                  width: '14px',
+                                  height: '1px',
+                                  backgroundColor: '#ef4444'
+                                }}
+                              />
+                            </div>
+                          </button>
+                          {[1, 2, 3, 4, 5].map(width => {
+                            const isSelected = selectedBorderWidth === width;
+                            
+                            return (
+                              <button
+                                key={width}
+                                onClick={() => {
+                                  changeBorderWidth(width);
+                                  setSelectedBorderWidth(width);
+                                }}
+                                style={{
+                                  padding: '8px 6px',
+                                  fontSize: '10px',
+                                  border: isSelected ? '1px solid #3b82f6' : '1px solid #d1d5db',
+                                  borderRadius: '3px',
+                                  backgroundColor: isSelected ? '#dbeafe' : 'white',
+                                  cursor: 'pointer',
+                                  minWidth: '24px',
+                                  display: 'flex',
+                                  alignItems: 'center',
+                                  justifyContent: 'center'
+                                }}
+                              >
+                                <div
+                                  style={{
+                                    width: '12px',
+                                    height: `${width}px`,
+                                    backgroundColor: '#374151',
+                                    borderRadius: width > 2 ? '1px' : '0'
+                                  }}
+                                />
+                              </button>
+                            );
+                          })}
+                        </div>
+                      </div>
+                      
+                      {/* Border Color */}
+                      <div>
+                        {/* <span style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', display: 'block' }}>Color:</span> */}
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
+                          {['#000000', '#ffffff', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6b7280', '#ec4899', '#84cc16'].map((color, index) => {
+                            const isSelected = selectedBorderColor === color;
+                            
+                            return (
+                              <div
+                                key={index}
+                                style={{
+                                  width: '24px',
+                                  height: '24px',
+                                  backgroundColor: color,
+                                  border: color === '#ffffff' ? '2px solid #e5e7eb' : 
+                                          isSelected ? '2px solid #374151' : '2px solid transparent',
+                                  borderRadius: '4px',
+                                  cursor: 'pointer',
+                                  transition: 'all 0.2s ease'
+                                }}
+                                onClick={() => {
+                                  changeBorderColor(color);
+                                  setSelectedBorderColor(color);
+                                }}
+                                onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+                                onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                                title={`Border: ${color}`}
+                              />
+                            );
+                          })}
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                )}
+              </div>
               
               {/* Layer management buttons */}
               <button 
