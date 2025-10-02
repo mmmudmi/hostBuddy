@@ -510,6 +510,79 @@ const LayoutDesigner = () => {
     }
   }, [selectedId, selectedIds, isMultiSelect]);
 
+  // Layer management functions
+  const bringToFront = useCallback(() => {
+    if (!selectedId && (!isMultiSelect || selectedIds.length === 0)) return;
+    
+    const targetIds = selectedId ? [selectedId] : selectedIds;
+    
+    setLayoutElements(prev => {
+      const elementsToMove = prev.filter(element => targetIds.includes(element.id));
+      const otherElements = prev.filter(element => !targetIds.includes(element.id));
+      return [...otherElements, ...elementsToMove]; // Move to end (front)
+    });
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect]);
+
+  const sendToBack = useCallback(() => {
+    if (!selectedId && (!isMultiSelect || selectedIds.length === 0)) return;
+    
+    const targetIds = selectedId ? [selectedId] : selectedIds;
+    
+    setLayoutElements(prev => {
+      const elementsToMove = prev.filter(element => targetIds.includes(element.id));
+      const otherElements = prev.filter(element => !targetIds.includes(element.id));
+      return [...elementsToMove, ...otherElements]; // Move to beginning (back)
+    });
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect]);
+
+  const bringForward = useCallback(() => {
+    if (!selectedId && (!isMultiSelect || selectedIds.length === 0)) return;
+    
+    const targetIds = selectedId ? [selectedId] : selectedIds;
+    
+    setLayoutElements(prev => {
+      const newElements = [...prev];
+      
+      // Move each selected element forward by one position
+      targetIds.forEach(id => {
+        const currentIndex = newElements.findIndex(element => element.id === id);
+        if (currentIndex < newElements.length - 1) {
+          // Swap with next element
+          [newElements[currentIndex], newElements[currentIndex + 1]] = 
+          [newElements[currentIndex + 1], newElements[currentIndex]];
+        }
+      });
+      
+      return newElements;
+    });
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect]);
+
+  const sendBackward = useCallback(() => {
+    if (!selectedId && (!isMultiSelect || selectedIds.length === 0)) return;
+    
+    const targetIds = selectedId ? [selectedId] : selectedIds;
+    
+    setLayoutElements(prev => {
+      const newElements = [...prev];
+      
+      // Move each selected element backward by one position
+      targetIds.forEach(id => {
+        const currentIndex = newElements.findIndex(element => element.id === id);
+        if (currentIndex > 0) {
+          // Swap with previous element
+          [newElements[currentIndex], newElements[currentIndex - 1]] = 
+          [newElements[currentIndex - 1], newElements[currentIndex]];
+        }
+      });
+      
+      return newElements;
+    });
+    setHasUnsavedChanges(true);
+  }, [selectedId, selectedIds, isMultiSelect]);
+
   // Cut selected elements
   const cutElements = useCallback(() => {
     const elementsToCut = [];
@@ -642,6 +715,7 @@ const LayoutDesigner = () => {
     setSelectedId(groupId);
     setSelectedIds([]);
     setIsMultiSelect(false);
+    setTempGroupBounds(null);
     setHasUnsavedChanges(true);
   }, [selectedIds, layoutElements, getElementVisualBounds]);
 
@@ -737,6 +811,40 @@ const LayoutDesigner = () => {
       }
     }
     
+    // Layer management shortcuts
+    if (isCtrlOrCmd && event.shiftKey && event.key === ']') {
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        // Ctrl/Cmd + Shift + ] = Bring to front
+        bringToFront();
+      }
+    }
+    
+    if (isCtrlOrCmd && event.shiftKey && event.key === '[') {
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        // Ctrl/Cmd + Shift + [ = Send to back
+        sendToBack();
+      }
+    }
+    
+    // Incremental layer movement shortcuts
+    if (isCtrlOrCmd && event.key === ']') {
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        // Ctrl/Cmd + ] = Bring forward one layer
+        bringForward();
+      }
+    }
+    
+    if (isCtrlOrCmd && event.key === '[') {
+      if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
+        event.preventDefault();
+        // Ctrl/Cmd + [ = Send backward one layer
+        sendBackward();
+      }
+    }
+    
     // Delete key - only prevent default if we have elements selected
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
@@ -744,7 +852,7 @@ const LayoutDesigner = () => {
         deleteElement();
       }
     }
-  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements, selectedId, selectedIds, isMultiSelect, clipboard.length]);
+  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -1267,6 +1375,18 @@ const LayoutDesigner = () => {
       onDragStart: handleDragStart,
       onDragMove: handleDragMove,
       onDragEnd: handleDragEnd,
+      onTransform: (e) => {
+        // Live update during transform for immediate visual feedback
+        const node = e.target;
+        const scaleX = node.scaleX();
+        const scaleY = node.scaleY();
+        
+        // Update the element's visual size in real-time
+        node.width(element.width * scaleX);
+        node.height(element.height * scaleY);
+        node.scaleX(1);
+        node.scaleY(1);
+      },
       onTransformEnd: handleTransformEnd,
       onClick: (e) => handleSelect(element.id, e.evt),
       onTap: (e) => handleSelect(element.id, e.evt),
@@ -1432,6 +1552,18 @@ const LayoutDesigner = () => {
         height: element.height,
         draggable: true,
         onDragEnd: handleGroupDragEnd,
+        onTransform: (e) => {
+          // Live update during group transform
+          const node = e.target;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+          
+          // Update group container size in real-time
+          node.width(element.width * scaleX);
+          node.height(element.height * scaleY);
+          node.scaleX(1);
+          node.scaleY(1);
+        },
         onTransformEnd: handleTransformEnd, // Add transform handler for groups
         onClick: (e) => handleSelect(element.id, e.evt),
         onTap: (e) => handleSelect(element.id, e.evt),
@@ -1453,8 +1585,8 @@ const LayoutDesigner = () => {
           <Rect
             width={element.width}
             height={element.height}
-            fill="rgba(59, 130, 246, 0.1)"
-            stroke={isSelected ? '#0066cc' : '#9ca3af'}
+            // fill="transparent"
+            // stroke="transparent"
             strokeWidth={isSelected ? 2 : 1}
             dash={[5, 5]}
             listening={false} // Visual only, selection handled by the invisible rect above
@@ -1638,11 +1770,18 @@ const LayoutDesigner = () => {
         transformerRef.current.nodes([selectedNode]);
         transformerRef.current.getLayer().batchDraw();
       }
+    } else if (isMultiSelect && selectedIds.length > 1 && tempGroupBounds && transformerRef.current) {
+      // Attach transformer to temp group bounds for multi-selection
+      const tempGroupNode = stageRef.current.findOne('.temp-group-bounds');
+      if (tempGroupNode) {
+        transformerRef.current.nodes([tempGroupNode]);
+        transformerRef.current.getLayer().batchDraw();
+      }
     } else if (transformerRef.current) {
       transformerRef.current.nodes([]);
       transformerRef.current.getLayer().batchDraw();
     }
-  }, [selectedId]);
+  }, [selectedId, isMultiSelect, selectedIds.length, tempGroupBounds]);
 
   if (isLoading) {
     return <LoadingSpinner />;
@@ -1794,6 +1933,39 @@ const LayoutDesigner = () => {
               >
                 🔲 Border
               </button>
+              
+              {/* Layer management buttons */}
+              <button 
+                onClick={bringToFront}
+                className="btn btn-info btn-small"
+                title="Bring to front - Move selected objects to the top layer"
+              >
+                ⬆️ Most Front
+              </button>
+              <button 
+                onClick={sendToBack}
+                className="btn btn-info btn-small"
+                title="Send to back - Move selected objects to the bottom layer"
+              >
+                ⬇️ Most Back
+              </button>
+              
+              {/* Incremental layer movement buttons */}
+              <button 
+                onClick={bringForward}
+                className="btn btn-info btn-small"
+                title="Bring forward - Move selected objects up one layer (Ctrl+])"
+              >
+                ↗️ Forward
+              </button>
+              <button 
+                onClick={sendBackward}
+                className="btn btn-info btn-small"
+                title="Send backward - Move selected objects down one layer (Ctrl+[)"
+              >
+                ↙️ Backward
+              </button>
+              
               <button 
                 onClick={cutElements}
                 className="btn btn-secondary btn-small"
@@ -1893,6 +2065,18 @@ const LayoutDesigner = () => {
               </p>
               <p style={styles.instructionText}>
                 <strong>Delete:</strong> Delete or Backspace key
+              </p>
+              <p style={styles.instructionText}>
+                <strong>Bring to Front:</strong> Ctrl/Cmd + Shift + ]
+              </p>
+              <p style={styles.instructionText}>
+                <strong>Send to Back:</strong> Ctrl/Cmd + Shift + [
+              </p>
+              <p style={styles.instructionText}>
+                <strong>Bring Forward:</strong> Ctrl/Cmd + ]
+              </p>
+              <p style={styles.instructionText}>
+                <strong>Send Backward:</strong> Ctrl/Cmd + [
               </p>
               {isMultiSelect && (
                 <p style={{...styles.instructionText, color: '#3b82f6', fontWeight: 'bold'}}>
@@ -2019,8 +2203,111 @@ const LayoutDesigner = () => {
                     stroke="#3b82f6"
                     strokeWidth={2}
                     dash={[8, 4]}
-                    listening={false}
+                    listening={true}
+                    draggable={true}
                     name="temp-group-bounds"
+                    onDragEnd={(e) => {
+                      // Handle temp group drag - move all selected elements
+                      const deltaX = e.target.x() - tempGroupBounds.x;
+                      const deltaY = e.target.y() - tempGroupBounds.y;
+                      
+                      // Update all selected elements
+                      setLayoutElements(prev => 
+                        prev.map(element => 
+                          selectedIds.includes(element.id)
+                            ? { ...element, x: element.x + deltaX, y: element.y + deltaY }
+                            : element
+                        )
+                      );
+                      
+                      // Update temp group bounds
+                      setTempGroupBounds(prev => ({
+                        ...prev,
+                        x: e.target.x(),
+                        y: e.target.y()
+                      }));
+                      
+                      // Reset the rect position
+                      e.target.x(tempGroupBounds.x);
+                      e.target.y(tempGroupBounds.y);
+                    }}
+                    onTransform={(e) => {
+                      // Live update during temp group transform
+                      const node = e.target;
+                      const scaleX = node.scaleX();
+                      const scaleY = node.scaleY();
+                      
+                      // Update temp group bounds size in real-time
+                      node.width(tempGroupBounds.width * scaleX);
+                      node.height(tempGroupBounds.height * scaleY);
+                      node.scaleX(1);
+                      node.scaleY(1);
+                      
+                      // Live update of selected elements during transform
+                      const newWidth = tempGroupBounds.width * scaleX;
+                      const newHeight = tempGroupBounds.height * scaleY;
+                      
+                      setLayoutElements(prev => 
+                        prev.map(element => {
+                          if (selectedIds.includes(element.id)) {
+                            // Calculate relative position within temp group
+                            const relativeX = (element.x - tempGroupBounds.x) / tempGroupBounds.width;
+                            const relativeY = (element.y - tempGroupBounds.y) / tempGroupBounds.height;
+                            
+                            return {
+                              ...element,
+                              x: tempGroupBounds.x + (relativeX * newWidth),
+                              y: tempGroupBounds.y + (relativeY * newHeight),
+                              width: element.width * scaleX,
+                              height: element.height * scaleY,
+                              fontSize: element.type === 'text' && element.fontSize ? element.fontSize * Math.min(scaleX, scaleY) : element.fontSize
+                            };
+                          }
+                          return element;
+                        })
+                      );
+                    }}
+                    onTransformEnd={(e) => {
+                      // Handle temp group transform - scale all selected elements
+                      const node = e.target;
+                      const scaleX = node.scaleX();
+                      const scaleY = node.scaleY();
+                      
+                      const newWidth = tempGroupBounds.width * scaleX;
+                      const newHeight = tempGroupBounds.height * scaleY;
+                      
+                      // Scale all selected elements relative to temp group bounds
+                      setLayoutElements(prev => 
+                        prev.map(element => {
+                          if (selectedIds.includes(element.id)) {
+                            // Calculate relative position within temp group
+                            const relativeX = (element.x - tempGroupBounds.x) / tempGroupBounds.width;
+                            const relativeY = (element.y - tempGroupBounds.y) / tempGroupBounds.height;
+                            
+                            return {
+                              ...element,
+                              x: tempGroupBounds.x + (relativeX * newWidth),
+                              y: tempGroupBounds.y + (relativeY * newHeight),
+                              width: element.width * scaleX,
+                              height: element.height * scaleY,
+                              fontSize: element.type === 'text' && element.fontSize ? element.fontSize * Math.min(scaleX, scaleY) : element.fontSize
+                            };
+                          }
+                          return element;
+                        })
+                      );
+                      
+                      // Update temp group bounds
+                      setTempGroupBounds(prev => ({
+                        ...prev,
+                        width: newWidth,
+                        height: newHeight
+                      }));
+                      
+                      // Reset transform
+                      node.scaleX(1);
+                      node.scaleY(1);
+                    }}
                   />
                   {/* Corner indicators for temporary group */}
                   <Circle
@@ -2231,14 +2518,6 @@ const LayoutDesigner = () => {
                       onClick={() => {
                         changeBorderColor(color);
                         setSelectedBorderColor(color);
-                        // Add ripple effect
-                        const element = document.activeElement;
-                        if (element) {
-                          element.style.transform = 'scale(0.8)';
-                          setTimeout(() => {
-                            element.style.transform = 'scale(1.1)';
-                          }, 100);
-                        }
                       }}
                       onMouseEnter={() => setHoveredBorderColor(index)}
                       onMouseLeave={() => setHoveredBorderColor(null)}
