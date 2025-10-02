@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Stage, Layer, Rect, Circle, Text, Transformer, Ellipse, Line, RegularPolygon, Star, Arc, Group } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Text, Transformer, Ellipse, Line, RegularPolygon, Star, Arc, Group, Path } from 'react-konva';
 import { fetchEventById } from '../store/eventSlice';
 import layoutAPI from '../utils/api/layoutAPI';
 import jsPDF from 'jspdf';
@@ -35,6 +35,7 @@ const LayoutDesigner = () => {
   const [showBorderControls, setShowBorderControls] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showStyleControls, setShowStyleControls] = useState(false);
+  const [showInfoHover, setShowInfoHover] = useState(false);
   
   // Interactive states for border controls
   const [hoveredBorderWidth, setHoveredBorderWidth] = useState(null);
@@ -44,6 +45,13 @@ const LayoutDesigner = () => {
   const [selectedColor, setSelectedColor] = useState('#9ca3af');
   const [isToggleHovered, setIsToggleHovered] = useState(false);
   const [isCancelHovered, setIsCancelHovered] = useState(false);
+  
+  // Snap-to-grid functionality
+  const [snapToGrid, setSnapToGrid] = useState(true);
+  const [showSnapGuides, setShowSnapGuides] = useState([]);
+  const GRID_SIZE_X = 20; // Horizontal grid spacing
+  const GRID_SIZE_Y = 15; // Vertical grid spacing
+  const SNAP_THRESHOLD = 10; // Distance threshold for snapping
 
   // Available color options
   const colorOptions = [
@@ -134,11 +142,14 @@ const LayoutDesigner = () => {
   }, [dispatch, id, navigate, loadLayouts]);
 
   const addElement = (elementType) => {
+    // Get optimal position using auto-alignment
+    const optimalPosition = getOptimalPlacementPosition();
+    
     const newElement = {
       id: Date.now().toString(),
       type: elementType.type,
-      x: 100,
-      y: 100,
+      x: optimalPosition.x,
+      y: optimalPosition.y,
       width: elementType.defaultWidth,
       height: elementType.defaultHeight,
       color: elementType.color,
@@ -409,6 +420,91 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, []);
 
+  // Snap-to-grid utility functions
+  const snapToGridPosition = useCallback((x, y) => {
+    if (!snapToGrid) return { x, y };
+    
+    const snappedX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
+    const snappedY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
+    
+    return { x: snappedX, y: snappedY };
+  }, [snapToGrid, GRID_SIZE_X, GRID_SIZE_Y]);
+
+  const shouldSnapToPosition = useCallback((currentX, currentY, targetX, targetY) => {
+    if (!snapToGrid) return false;
+    
+    const deltaX = Math.abs(currentX - targetX);
+    const deltaY = Math.abs(currentY - targetY);
+    
+    return deltaX <= SNAP_THRESHOLD && deltaY <= SNAP_THRESHOLD;
+  }, [snapToGrid, SNAP_THRESHOLD]);
+
+  const findNearestGridPosition = useCallback((x, y) => {
+    const nearbyPositions = [];
+    
+    // Calculate nearby grid intersections
+    const gridX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
+    const gridY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
+    
+    // Check nearby grid points
+    for (let offsetX = -1; offsetX <= 1; offsetX++) {
+      for (let offsetY = -1; offsetY <= 1; offsetY++) {
+        const snapX = gridX + (offsetX * GRID_SIZE_X);
+        const snapY = gridY + (offsetY * GRID_SIZE_Y);
+        
+        if (shouldSnapToPosition(x, y, snapX, snapY)) {
+          nearbyPositions.push({ x: snapX, y: snapY });
+        }
+      }
+    }
+    
+    // Return closest position or original if none found
+    if (nearbyPositions.length > 0) {
+      return nearbyPositions.reduce((closest, pos) => {
+        const currentDist = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
+        const closestDist = Math.sqrt(Math.pow(x - closest.x, 2) + Math.pow(y - closest.y, 2));
+        return currentDist < closestDist ? pos : closest;
+      });
+    }
+    
+    return { x, y };
+  }, [GRID_SIZE_X, GRID_SIZE_Y, shouldSnapToPosition]);
+
+  const getOptimalPlacementPosition = useCallback(() => {
+    // Find a good starting position for new elements
+    const spacing = Math.max(GRID_SIZE_X, GRID_SIZE_Y) * 2;
+    let startX = GRID_SIZE_X * 5; // Start 5 grid units from left
+    let startY = GRID_SIZE_Y * 5; // Start 5 grid units from top
+    
+    // Check if position is occupied by existing elements
+    const isPositionOccupied = (x, y, width = 60, height = 60) => {
+      return layoutElements.some(element => {
+        const buffer = 20; // Minimum distance between elements
+        return (
+          x < element.x + element.width + buffer &&
+          x + width + buffer > element.x &&
+          y < element.y + element.height + buffer &&
+          y + height + buffer > element.y
+        );
+      });
+    };
+    
+    // Find next available position
+    while (isPositionOccupied(startX, startY)) {
+      startX += spacing;
+      if (startX > 600) { // If too far right, move to next row
+        startX = GRID_SIZE_X * 5;
+        startY += spacing;
+      }
+      if (startY > 400) { // If too far down, reset to top
+        startY = GRID_SIZE_Y * 5;
+        break;
+      }
+    }
+    
+    return snapToGridPosition(startX, startY);
+  }, [layoutElements, snapToGridPosition, GRID_SIZE_X, GRID_SIZE_Y]);
+
   // Start editing text
   const startTextEdit = useCallback((elementId, childElement = null) => {
     if (childElement) {
@@ -483,19 +579,44 @@ const LayoutDesigner = () => {
     if (isMultiSelect && selectedIds.length > 0) {
       // Change color of multiple selected elements
       setLayoutElements(prev => 
-        prev.map(element => 
-          selectedIds.includes(element.id) 
-            ? { ...element, color: newColor }
-            : element
-        )
+        prev.map(element => {
+          if (selectedIds.includes(element.id)) {
+            if (element.type === 'merged' && element.children) {
+              // For merged objects, update both the element color and all children colors
+              return {
+                ...element,
+                color: newColor,
+                children: element.children.map(child => ({
+                  ...child,
+                  color: newColor
+                }))
+              };
+            } else {
+              return { ...element, color: newColor };
+            }
+          }
+          return element;
+        })
       );
     } else if (selectedId) {
       // Change color of single selected element
-      updateElement(selectedId, { color: newColor });
+      const selectedElement = layoutElements.find(el => el.id === selectedId);
+      if (selectedElement && selectedElement.type === 'merged' && selectedElement.children) {
+        // For merged objects, update both the element color and all children colors
+        updateElement(selectedId, {
+          color: newColor,
+          children: selectedElement.children.map(child => ({
+            ...child,
+            color: newColor
+          }))
+        });
+      } else {
+        updateElement(selectedId, { color: newColor });
+      }
     }
     setShowColorPicker(false);
     setHasUnsavedChanges(true);
-  }, [selectedId, selectedIds, isMultiSelect, updateElement]);
+  }, [selectedId, selectedIds, isMultiSelect, updateElement, layoutElements]);
 
   // Clear border for selected elements
   const toggleElementBorder = useCallback(() => {
@@ -838,6 +959,217 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedId, layoutElements]);
 
+  // Calculate the outline path for merged objects that follows the actual shape perimeters
+  const calculateMergedOutlinePath = useCallback((elements, offsetX, offsetY) => {
+    // Create individual shape paths and combine them
+    let combinedPath = '';
+    
+    elements.forEach((element, index) => {
+      // Use relative coordinates since the Path component will be positioned at offsetX, offsetY
+      const relativeX = element.x - offsetX;
+      const relativeY = element.y - offsetY;
+      
+      let shapePath = '';
+      
+      if (element.type === 'round') {
+        // Circle path - element x,y is center
+        const radius = element.width / 2;
+        const centerX = relativeX;
+        const centerY = relativeY;
+        shapePath = `M ${centerX + radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY} Z`;
+      } else if (element.type === 'ellipse') {
+        // Ellipse path - element x,y is center
+        const radiusX = element.width / 2;
+        const radiusY = element.height / 2;
+        const centerX = relativeX;
+        const centerY = relativeY;
+        shapePath = `M ${centerX + radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX - radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX + radiusX} ${centerY} Z`;
+      } else if (element.type === 'triangle') {
+        // Triangle path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        const point1X = centerX;
+        const point1Y = centerY - radius;
+        const point2X = centerX - radius * Math.cos(Math.PI / 6);
+        const point2Y = centerY + radius * Math.sin(Math.PI / 6);
+        const point3X = centerX + radius * Math.cos(Math.PI / 6);
+        const point3Y = centerY + radius * Math.sin(Math.PI / 6);
+        shapePath = `M ${point1X} ${point1Y} L ${point2X} ${point2Y} L ${point3X} ${point3Y} Z`;
+      } else if (element.type === 'pentagon') {
+        // Pentagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let pentagonPath = '';
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * 72 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            pentagonPath += `M ${x} ${y}`;
+          } else {
+            pentagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = pentagonPath + ' Z';
+      } else if (element.type === 'hexagon') {
+        // Hexagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let hexagonPath = '';
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * 60 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            hexagonPath += `M ${x} ${y}`;
+          } else {
+            hexagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = hexagonPath + ' Z';
+      } else if (element.type === 'octagon') {
+        // Octagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let octagonPath = '';
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * 45 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            octagonPath += `M ${x} ${y}`;
+          } else {
+            octagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = octagonPath + ' Z';
+      } else if (element.type === 'star') {
+        // Star path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const outerRadius = element.width / 2;
+        const innerRadius = outerRadius * 0.5;
+        let starPath = '';
+        for (let i = 0; i < 10; i++) {
+          const angle = (i * 36 - 90) * Math.PI / 180;
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            starPath += `M ${x} ${y}`;
+          } else {
+            starPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = starPath + ' Z';
+      } else if (element.type === 'arc') {
+        // Arc path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const outerRadius = element.width / 2;
+        const innerRadius = outerRadius / 2;
+        // Create arc shape (semicircle)
+        shapePath = `M ${centerX - outerRadius} ${centerY} A ${outerRadius} ${outerRadius} 0 0 1 ${centerX + outerRadius} ${centerY} L ${centerX + innerRadius} ${centerY} A ${innerRadius} ${innerRadius} 0 0 0 ${centerX - innerRadius} ${centerY} Z`;
+      } else if (element.type === 'line') {
+        // Line path - element x,y is top-left corner
+        const startX = relativeX;
+        const startY = relativeY + element.height / 2; // Center the line vertically
+        const endX = relativeX + element.width;
+        const endY = startY;
+        // Create a thin rectangle for the line border
+        const lineHeight = element.height || 2;
+        shapePath = `M ${startX} ${startY - lineHeight/2} L ${endX} ${startY - lineHeight/2} L ${endX} ${startY + lineHeight/2} L ${startX} ${startY + lineHeight/2} Z`;
+      } else {
+        // Rectangle path (including square, rectangle, text) - element x,y is top-left corner
+        shapePath = `M ${relativeX} ${relativeY} L ${relativeX + element.width} ${relativeY} L ${relativeX + element.width} ${relativeY + element.height} L ${relativeX} ${relativeY + element.height} Z`;
+      }
+      
+      combinedPath += shapePath + ' ';
+    });
+    
+    return combinedPath.trim();
+  }, []);
+
+
+  // Merge selected elements into a single element
+  const mergeElements = useCallback(() => {
+    if (selectedIds.length < 2) {
+      return;
+    }
+
+    const elementsToMerge = layoutElements.filter(element => selectedIds.includes(element.id));
+    
+    // Calculate bounding box for the merged element
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    elementsToMerge.forEach(element => {
+      const bounds = getElementVisualBounds(element);
+      minX = Math.min(minX, bounds.minX);
+      minY = Math.min(minY, bounds.minY);
+      maxX = Math.max(maxX, bounds.maxX);
+      maxY = Math.max(maxY, bounds.maxY);
+    });
+
+    const mergedId = `merged_${Date.now()}`;
+    
+    // Combine text from all elements
+    const combinedText = elementsToMerge
+      .filter(el => el.text && el.text.trim())
+      .map(el => el.text.trim())
+      .join(' ');
+
+    // Use the most common border properties from elements that have borders
+    const bordersWithWidth = elementsToMerge.filter(el => el.borderWidth && el.borderWidth > 0);
+    // Start with no border by default - user can add border later if needed
+    const borderWidth = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderWidth : 0;
+    const borderColor = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderColor : '#374151';
+
+    // Calculate the outline path that follows the actual perimeter
+    const outlinePath = calculateMergedOutlinePath(elementsToMerge, minX, minY);
+
+    // Create merged element that contains all the original elements as children
+    const mergedElement = {
+      id: mergedId,
+      type: 'merged', // Special type for merged elements
+      x: minX,
+      y: minY,
+      width: maxX - minX,
+      height: maxY - minY,
+      color: 'transparent', // Merged container is transparent
+      label: 'Merged',
+      rotation: 0,
+      text: combinedText || null,
+      borderWidth: borderWidth,
+      borderColor: borderColor,
+      outlinePath: outlinePath, // Store the calculated outline path
+      // Store original elements as children with relative coordinates
+      children: elementsToMerge.map(element => ({
+        ...element,
+        // Convert to relative coordinates within the merged container
+        x: element.x - minX,
+        y: element.y - minY,
+      })),
+      // Mark as merged for special rendering
+      isMerged: true,
+    };
+
+    // Remove individual elements and add merged element
+    setLayoutElements(prev => [
+      ...prev.filter(element => !selectedIds.includes(element.id)),
+      mergedElement
+    ]);
+    
+    // Select the new merged element
+    setSelectedId(mergedId);
+    setSelectedIds([]);
+    setIsMultiSelect(false);
+    setTempGroupBounds(null);
+    setHasUnsavedChanges(true);
+  }, [selectedIds, layoutElements, getElementVisualBounds]);
+
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
     // Don't handle shortcuts when editing text
@@ -869,6 +1201,14 @@ const LayoutDesigner = () => {
       } else {
         // Ctrl/Cmd + G = Group
         groupElements();
+      }
+    }
+    
+    // Merge shortcut - Ctrl/Cmd + M
+    if (isCtrlOrCmd && event.key.toLowerCase() === 'm') {
+      if (selectedIds.length > 1) {
+        event.preventDefault();
+        mergeElements();
       }
     }
     
@@ -935,7 +1275,7 @@ const LayoutDesigner = () => {
         deleteElement();
       }
     }
-  }, [editingTextId, groupElements, ungroupElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length]);
+  }, [editingTextId, groupElements, ungroupElements, mergeElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length, layoutElements]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -1356,6 +1696,23 @@ const LayoutDesigner = () => {
           y: e.target.y(),
         });
       }
+      
+      // Show snap guides during drag if snap-to-grid is enabled
+      if (snapToGrid) {
+        const currentX = e.target.x();
+        const currentY = e.target.y();
+        const nearestGridPos = findNearestGridPosition(currentX, currentY);
+        
+        // Show guides if close enough to snap
+        if (shouldSnapToPosition(currentX, currentY, nearestGridPos.x, nearestGridPos.y)) {
+          setShowSnapGuides([
+            { x: nearestGridPos.x, y: 0, width: 1, height: 600 }, // Vertical guide
+            { x: 0, y: nearestGridPos.y, width: 800, height: 1 }   // Horizontal guide
+          ]);
+        } else {
+          setShowSnapGuides([]);
+        }
+      }
     };
 
     const handleDragEnd = (e) => {
@@ -1368,23 +1725,32 @@ const LayoutDesigner = () => {
         // Get initial positions stored at drag start
         const initialPositions = e.target.getAttr('groupInitialPositions');
         
+        // Apply snap-to-grid for group movement
+        const draggedElementPosition = findNearestGridPosition(e.target.x(), e.target.y());
+        const actualDeltaX = draggedElementPosition.x - element.x;
+        const actualDeltaY = draggedElementPosition.y - element.y;
+        
         // Final position update for all elements in the group
         setLayoutElements(prev => 
           prev.map(el => {
             if (selectedIds.includes(el.id)) {
               if (el.id === element.id) {
-                // Update the dragged element to its new position
+                // Update the dragged element to its snapped position
                 return {
                   ...el,
-                  x: e.target.x(),
-                  y: e.target.y(),
+                  x: draggedElementPosition.x,
+                  y: draggedElementPosition.y,
                 };
               } else if (initialPositions?.[el.id]) {
-                // Update other elements relative to their initial positions
+                // Update other elements relative to their initial positions with snapping
+                const newPosition = findNearestGridPosition(
+                  initialPositions[el.id].x + actualDeltaX,
+                  initialPositions[el.id].y + actualDeltaY
+                );
                 return {
                   ...el,
-                  x: initialPositions[el.id].x + deltaX,
-                  y: initialPositions[el.id].y + deltaY,
+                  x: newPosition.x,
+                  y: newPosition.y,
                 };
               }
             }
@@ -1396,12 +1762,16 @@ const LayoutDesigner = () => {
         e.target.setAttr('groupInitialPositions', null);
         e.target.setAttr('initialGroupBounds', null);
       } else {
-        // Single element movement
+        // Single element movement with snap-to-grid
+        const snappedPosition = findNearestGridPosition(e.target.x(), e.target.y());
         updateElement(element.id, {
-          x: e.target.x(),
-          y: e.target.y(),
+          x: snappedPosition.x,
+          y: snappedPosition.y,
         });
       }
+      
+      // Clear snap guides after drag ends
+      setShowSnapGuides([]);
     };
 
     const handleTransformEnd = (e) => {
@@ -1477,6 +1847,15 @@ const LayoutDesigner = () => {
         : (isInTempGroup 
           ? 1 
           : (element.borderWidth || 0)),
+      // Prevent stroke from being affected by transforms
+      strokeScaleEnabled: false,
+      // For merged objects with borders, ensure the border is visible
+      perfectDrawEnabled: false,
+      // For merged objects, use 'outside' stroke positioning if supported
+      ...(element.isMerged && element.borderWidth > 0 && {
+        lineCap: 'round',
+        lineJoin: 'round',
+      }),
       draggable: true,
       onDragStart: handleDragStart,
       onDragMove: handleDragMove,
@@ -1873,6 +2252,227 @@ const LayoutDesigner = () => {
         </Group>
       );
     }
+    else if (element.type === 'merged') {
+      // Special rendering for merged elements - shows all children as a single unit
+      const handleMergedDragMove = (e) => {
+        // Update the merged element position in real-time during dragging
+        updateElement(element.id, {
+          x: e.target.x(),
+          y: e.target.y(),
+        });
+      };
+      
+      const handleMergedDragEnd = (e) => {
+        const deltaX = e.target.x() - element.x;
+        const deltaY = e.target.y() - element.y;
+        
+        // Update the merged element position
+        updateElement(element.id, {
+          x: e.target.x(),
+          y: e.target.y(),
+        });
+      };
+
+      const mergedProps = {
+        key: element.id,
+        id: element.id,
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        draggable: true,
+        onDragMove: handleMergedDragMove,
+        onDragEnd: handleMergedDragEnd,
+        onTransform: (e) => {
+          // Live update during merged element transform
+          const node = e.target;
+          const scaleX = node.scaleX();
+          const scaleY = node.scaleY();
+          
+          // Update merged container size in real-time
+          node.width(element.width * scaleX);
+          node.height(element.height * scaleY);
+          node.scaleX(1);
+          node.scaleY(1);
+        },
+        onTransformEnd: handleTransformEnd,
+        onClick: (e) => handleSelect(element.id, e.evt),
+        onTap: (e) => handleSelect(element.id, e.evt),
+      };
+
+      // Render merged element as a group containing all original shapes
+      shape = (
+        <Group {...mergedProps}>
+          {/* Invisible selection area */}
+          <Rect
+            width={element.width}
+            height={element.height}
+            fill="transparent"
+            listening={true}
+          />
+          {/* Render all children shapes */}
+          {element.children && element.children.map(child => {
+            const childProps = {
+              key: child.id,
+              x: child.x,
+              y: child.y,
+              width: child.width,
+              height: child.height,
+              fill: child.color,
+              stroke: 'transparent', // Remove individual borders for merged objects
+              strokeWidth: 0, // Remove individual borders for merged objects
+              listening: false, // Children don't handle interactions in merged state
+            };
+            
+            let childShape;
+            
+            if (child.type === 'round') {
+              childShape = (
+                <Circle 
+                  {...childProps} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'ellipse') {
+              childShape = (
+                <Ellipse 
+                  {...childProps} 
+                  radiusX={child.width / 2}
+                  radiusY={child.height / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'triangle') {
+              childShape = (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={3} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'pentagon') {
+              childShape = (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={5} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'hexagon') {
+              childShape = (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={6} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'octagon') {
+              childShape = (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={8} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'star') {
+              childShape = (
+                <Star 
+                  {...childProps} 
+                  numPoints={5} 
+                  innerRadius={child.width / 4} 
+                  outerRadius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'arc') {
+              childShape = (
+                <Arc 
+                  {...childProps} 
+                  innerRadius={child.width / 4} 
+                  outerRadius={child.width / 2} 
+                  angle={180}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
+            } else if (child.type === 'line') {
+              childShape = (
+                <Line 
+                  {...childProps} 
+                  points={[0, 0, child.width, 0]} 
+                  stroke={child.color} 
+                  strokeWidth={child.height || 2}
+                  fill={undefined}
+                />
+              );
+            } else if (child.type === 'text') {
+              childShape = (
+                <Text 
+                  {...childProps} 
+                  text={child.text || child.label || 'Text'} 
+                  fontSize={child.fontSize || 16}
+                  fill={child.color}
+                  width={child.width}
+                  height={child.height}
+                  align="center"
+                  verticalAlign="middle"
+                  stroke={undefined}
+                  strokeWidth={0}
+                />
+              );
+            } else {
+              // Default rectangle
+              childShape = <Rect {...childProps} />;
+            }
+            
+            return (
+              <React.Fragment key={child.id}>
+                {childShape}
+                {child.type !== 'text' && child.type !== 'line' && child.text && (
+                  <Text
+                    x={
+                      ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(child.type)
+                        ? child.x
+                        : child.x + child.width / 2
+                    }
+                    y={
+                      ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(child.type)
+                        ? child.y
+                        : child.y + child.height / 2
+                    }
+                    text={child.text}
+                    fontSize={12}
+                    fill="white"
+                    fontStyle="bold"
+                    align="center"
+                    verticalAlign="middle"
+                    width={80}
+                    height={24}
+                    offsetX={40}
+                    offsetY={12}
+                    listening={false}
+                    shadowColor="rgba(0, 0, 0, 0.5)"
+                    shadowBlur={2}
+                  />
+                )}
+              </React.Fragment>
+            );
+          })}
+        </Group>
+      );
+    }
     else {
       // Default to rectangle for square and any unknown types
       shape = <Rect {...shapeProps} onDblClick={() => startTextEdit(element.id)} onDblTap={() => startTextEdit(element.id)} />;
@@ -1880,7 +2480,40 @@ const LayoutDesigner = () => {
 
     return (
       <React.Fragment key={element.id}>
-        {shape}
+        {/* For merged objects with borders, render the border following the actual outline */}
+        {element.isMerged && element.type === 'merged' && element.borderWidth > 0 && element.borderColor && element.outlinePath && (
+          <Path
+            x={element.x}
+            y={element.y}
+            data={element.outlinePath}
+            fill="transparent"
+            stroke={element.borderColor}
+            strokeWidth={element.borderWidth}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        )}
+        {/* Fallback to rectangular border if no outline path is available */}
+        {element.isMerged && element.type === 'merged' && element.borderWidth > 0 && element.borderColor && !element.outlinePath && (
+          <Rect
+            x={element.x}
+            y={element.y}
+            width={element.width}
+            height={element.height}
+            fill="transparent"
+            stroke={element.borderColor}
+            strokeWidth={element.borderWidth}
+            strokeScaleEnabled={false}
+            listening={false}
+          />
+        )}
+        {/* Render the main shape (with border removed for merged objects) */}
+        {React.cloneElement(shape, element.isMerged && element.type === 'merged' && element.borderWidth > 0 ? {
+          // No need to modify merged elements since they render children directly
+        } : element.isMerged && element.borderWidth > 0 ? {
+          stroke: 'transparent',
+          strokeWidth: 0
+        } : {})}
         {element.type !== 'text' && element.type !== 'line' && element.type !== 'group' && element.text && (
           <Text
             x={
@@ -1959,9 +2592,30 @@ const LayoutDesigner = () => {
       {/* Toolbar */}
       <div className="layout-toolbar" style={styles.toolbar}>
         <div style={styles.toolbarLeft}>
-          <Link to={`/events/${id}`} style={styles.backLink}>
+          <button
+            onClick={() => {
+              if (hasUnsavedChanges) {
+                const confirmLeave = window.confirm(
+                  'You have unsaved changes that will be lost. Are you sure you want to go back to the event page?'
+                );
+                if (confirmLeave) {
+                  navigate(`/events/${id}`);
+                }
+              } else {
+                navigate(`/events/${id}`);
+              }
+            }}
+            style={{
+              ...styles.backLink,
+              background: 'none',
+              border: 'none',
+              cursor: 'pointer',
+              padding: 0,
+              font: 'inherit'
+            }}
+          >
             ← Back to Event
-          </Link>
+          </button>
           <h2 style={styles.eventTitle}>
             {currentEvent.title} - Layout
           </h2>
@@ -1981,11 +2635,37 @@ const LayoutDesigner = () => {
               style={{
                 ...styles.titleInput,
                 borderColor: hasUnsavedChanges ? '#f59e0b' : '#d1d5db',
-                backgroundColor: hasUnsavedChanges ? '#fefcbf' : 'white'
+                backgroundColor: hasUnsavedChanges ? '#fffde0ff' : 'white'
               }}
               autoComplete="off"
             />
           )}
+          
+          {/* Snap to Grid Toggle - Hide when objects are selected */}
+          {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
+            <button 
+              onClick={() => setSnapToGrid(!snapToGrid)}
+              className="btn btn-small"
+              title={snapToGrid ? 'Disable snap to grid' : 'Enable snap to grid'}
+              style={{
+                backgroundColor: snapToGrid ? '#22c55e' : '#f3f4f6',
+                color: snapToGrid ? 'white' : '#374151',
+                border: `1px solid ${snapToGrid ? '#16a34a' : '#d1d5db'}`,
+                display: 'flex',
+                alignItems: 'center',
+                gap: '4px',
+                padding: '6px 12px',
+                borderRadius: '6px',
+                cursor: 'pointer',
+                fontSize: '12px',
+                transition: 'all 0.2s ease',
+                height: '26px'
+              }}
+            >
+              🧲 {snapToGrid ? 'Grid ON' : 'Grid OFF'}
+            </button>
+          )}
+          
           {/* {hasUnsavedChanges && (
             <span style={styles.unsavedIndicator}>●</span>
           )} */}
@@ -2327,20 +3007,20 @@ const LayoutDesigner = () => {
                 className="btn btn-secondary btn-small"
                 title="Cut selected elements (Ctrl+X)"
               >
-                Cut (Ctrl+X)
+                Cut
               </button>
               <button 
                 onClick={copyElements}
                 className="btn btn-secondary btn-small"
                 title="Copy selected elements (Ctrl+C)"
               >
-                Copy (Ctrl+C)
+                Copy
               </button>
               <button 
                 onClick={deleteElement}
                 className="btn btn-danger btn-small"
               >
-                Delete Selected
+                Delete
               </button>
             </>
           )}
@@ -2350,17 +3030,26 @@ const LayoutDesigner = () => {
               className="btn btn-info btn-small"
               title="Paste elements (Ctrl+V)"
             >
-              Paste (Ctrl+V) [{clipboard.length}]
+              Paste
             </button>
           )}
           {isMultiSelect && selectedIds.length > 1 && (
-            <button 
-              onClick={groupElements}
-              className="btn btn-success btn-small"
-              title="Group selected elements (Ctrl+G)"
-            >
-              Group (Ctrl+G)
-            </button>
+            <>
+              <button 
+                onClick={groupElements}
+                className="btn btn-success btn-small"
+                title="Group selected elements (Ctrl+G)"
+              >
+                Group
+              </button>
+              <button 
+                onClick={mergeElements}
+                className="btn btn-info btn-small"
+                title="Merge selected elements into one (Ctrl+M)"
+              >
+                Merge
+              </button>
+            </>
           )}
           {selectedId && layoutElements.find(el => el.id === selectedId)?.type === 'group' && (
             <button 
@@ -2368,7 +3057,7 @@ const LayoutDesigner = () => {
               className="btn btn-warning btn-small"
               title="Ungroup selected group (Ctrl+Shift+G)"
             >
-              Ungroup (Ctrl+Shift+G)
+              Ungroup
             </button>
           )}
         </div>
@@ -2379,7 +3068,65 @@ const LayoutDesigner = () => {
         {/* Sidebar */}
         <div className="layout-sidebar" style={styles.sidebar}>
           <div style={styles.sidebarSection}>
-            <h3>Layout Elements</h3>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+              <h3 style={{ margin: 0 }}>Layout Elements</h3>
+              <div style={{ position: 'relative' }}>
+                <div
+                  onMouseEnter={() => setShowInfoHover(true)}
+                  onMouseLeave={() => setShowInfoHover(false)}
+                  style={{
+                    width: '20px',
+                    height: '20px',
+                    borderRadius: '50%',
+                    backgroundColor: '#e5e5e5ff',
+                    color: 'white',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '12px',
+                    fontWeight: 'bold',
+                    cursor: 'help',
+                    transition: 'all 0.2s ease'
+                  }}
+                >
+                  i
+                </div>
+                
+                {showInfoHover && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '25px',
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '280px',
+                    padding: '12px',
+                    fontSize: '12px',
+                    lineHeight: '1.4'
+                  }}>
+                    <div style={{ fontWeight: 'bold', marginBottom: '8px', color: '#374151' }}>Controls & Shortcuts</div>
+                    <div style={{ color: '#6b7280' }}>
+                      <div style={{ marginBottom: '4px' }}><strong>Edit Text:</strong> Double-click on text elements</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Multi-Select:</strong> Hold Shift + Click (creates temp group)</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Cut:</strong> Ctrl/Cmd + X</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Copy:</strong> Ctrl/Cmd + C</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Paste:</strong> Ctrl/Cmd + V</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Group:</strong> Ctrl/Cmd + G</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Merge:</strong> Ctrl/Cmd + M</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Ungroup:</strong> Ctrl/Cmd + Shift + G</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Delete:</strong> Delete or Backspace key</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Bring to Front:</strong> Ctrl/Cmd + Shift + ]</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Send to Back:</strong> Ctrl/Cmd + Shift + [</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Bring Forward:</strong> Ctrl/Cmd + ]</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Send Backward:</strong> Ctrl/Cmd + [</div>
+                    </div>
+                  </div>
+                )}
+              </div>
+            </div>
             <div style={styles.elementGrid}>
               {elementTypes.map((elementType, index) => (
                 <div
@@ -2391,64 +3138,6 @@ const LayoutDesigner = () => {
                   <span style={styles.elementLabel}>{elementType.label}</span>
                 </div>
               ))}
-            </div>
-          </div>
-
-          {/* Grouping Instructions */}
-          <div style={styles.sidebarSection}>
-            <h3>Controls & Shortcuts</h3>
-            <div style={styles.instructionsBox}>
-              <p style={styles.instructionText}>
-                <strong>Edit Text:</strong> Double-click on text elements
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Multi-Select:</strong> Hold Shift + Click (creates temp group)
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Cut:</strong> Ctrl/Cmd + X
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Copy:</strong> Ctrl/Cmd + C
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Paste:</strong> Ctrl/Cmd + V
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Group:</strong> Ctrl/Cmd + G
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Ungroup:</strong> Ctrl/Cmd + Shift + G
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Delete:</strong> Delete or Backspace key
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Bring to Front:</strong> Ctrl/Cmd + Shift + ]
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Send to Back:</strong> Ctrl/Cmd + Shift + [
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Bring Forward:</strong> Ctrl/Cmd + ]
-              </p>
-              <p style={styles.instructionText}>
-                <strong>Send Backward:</strong> Ctrl/Cmd + [
-              </p>
-              {isMultiSelect && (
-                <p style={{...styles.instructionText, color: '#3b82f6', fontWeight: 'bold'}}>
-                  {selectedIds.length} elements selected {tempGroupBounds ? '(temp group active)' : ''}
-                </p>
-              )}
-              {isShiftHeld && !isMultiSelect && (
-                <p style={{...styles.instructionText, color: '#f59e0b', fontWeight: 'bold'}}>
-                  Shift held - Click elements to create temp group
-                </p>
-              )}
-              {clipboard.length > 0 && (
-                <p style={{...styles.instructionText, color: '#10b981', fontWeight: 'bold'}}>
-                  {clipboard.length} element{clipboard.length > 1 ? 's' : ''} in clipboard ({clipboardOperation})
-                </p>
-              )}
             </div>
           </div>
 
@@ -2714,6 +3403,21 @@ const LayoutDesigner = () => {
                   />
                 </>
               )}
+              
+              {/* Snap-to-grid visual guides */}
+              {snapToGrid && showSnapGuides.map((guide, index) => (
+                <Rect
+                  key={`snap-guide-${index}`}
+                  x={guide.x}
+                  y={guide.y}
+                  width={guide.width}
+                  height={guide.height}
+                  fill="#22c55e"
+                  opacity={0.5}
+                  listening={false}
+                  name="snap-guide"
+                />
+              ))}
               
               {/* Transformer */}
               <Transformer
@@ -2988,6 +3692,7 @@ const styles = {
     borderRight: '1px solid #e2e8f0',
     padding: '1rem',
     overflowY: 'auto',
+    marginBottom: '0rem',
   },
   sidebarSection: {
     marginBottom: '2rem',
