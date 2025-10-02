@@ -656,13 +656,19 @@ const LayoutDesigner = () => {
       return;
     }
 
+    console.log('Ungrouping element:', groupElement);
+    console.log('Group children before ungrouping:', groupElement.children);
+
     // Convert children back to absolute coordinates
+    // Children already have their scaled dimensions from the transform handler
     const ungroupedElements = groupElement.children.map(child => ({
       ...child,
       id: `${child.id}_${Date.now()}`, // Generate new ID to avoid conflicts
       x: child.x + groupElement.x,
       y: child.y + groupElement.y,
     }));
+
+    console.log('Ungrouped elements:', ungroupedElements);
 
     // Remove group and add individual elements
     setLayoutElements(prev => [
@@ -1189,13 +1195,49 @@ const LayoutDesigner = () => {
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
       
-      updateElement(element.id, {
-        x: node.x(),
-        y: node.y(),
-        width: Math.max(5, node.width() * scaleX),
-        height: Math.max(5, node.height() * scaleY),
-        rotation: node.rotation(),
-      });
+      console.log('Transform end called for element:', element.id, 'type:', element.type, 'scaleX:', scaleX, 'scaleY:', scaleY);
+      
+      // Check if this is a group element
+      if (element.type === 'group') {
+        // For groups, we need to scale the children as well
+        const newWidth = Math.max(5, node.width() * scaleX);
+        const newHeight = Math.max(5, node.height() * scaleY);
+        
+        // Calculate scale ratios
+        const widthRatio = scaleX;
+        const heightRatio = scaleY;
+        
+        console.log('Group scale ratios - widthRatio:', widthRatio, 'heightRatio:', heightRatio);
+        
+        // Scale all children proportionally
+        const scaledChildren = element.children.map(child => ({
+          ...child,
+          x: child.x * widthRatio,
+          y: child.y * heightRatio,
+          width: child.width * widthRatio,
+          height: child.height * heightRatio,
+          // Scale font size for text elements
+          fontSize: child.type === 'text' && child.fontSize ? child.fontSize * Math.min(widthRatio, heightRatio) : child.fontSize
+        }));
+      
+        updateElement(element.id, {
+          x: node.x(),
+          y: node.y(),
+          width: newWidth,
+          height: newHeight,
+          rotation: node.rotation(),
+          children: scaledChildren,
+        });
+      } else {
+        // For regular elements, use the original logic
+        updateElement(element.id, {
+          x: node.x(),
+          y: node.y(),
+          width: Math.max(5, node.width() * scaleX),
+          height: Math.max(5, node.height() * scaleY),
+          rotation: node.rotation(),
+        });
+      }
       
       node.scaleX(1);
       node.scaleY(1);
@@ -1386,8 +1428,11 @@ const LayoutDesigner = () => {
         id: element.id,
         x: element.x,
         y: element.y,
+        width: element.width,
+        height: element.height,
         draggable: true,
         onDragEnd: handleGroupDragEnd,
+        onTransformEnd: handleTransformEnd, // Add transform handler for groups
         onClick: (e) => handleSelect(element.id, e.evt),
         onTap: (e) => handleSelect(element.id, e.evt),
         onDblClick: () => startTextEdit(element.id),
@@ -1423,30 +1468,119 @@ const LayoutDesigner = () => {
               width: child.width,
               height: child.height,
               fill: child.color,
+              stroke: child.borderColor || '#000000',
+              strokeWidth: child.borderWidth || 0,
               listening: false, // Group handles interaction
             };
             
             if (child.type === 'round') {
-              return <Circle {...childProps} radius={child.width / 2} />;
+              return (
+                <Circle 
+                  {...childProps} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'ellipse') {
-              return <Ellipse {...childProps} radiusX={child.width / 2} radiusY={child.height / 2} />;
+              return (
+                <Ellipse 
+                  {...childProps} 
+                  radiusX={child.width / 2} 
+                  radiusY={child.height / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'triangle') {
-              return <RegularPolygon {...childProps} sides={3} radius={child.width / 2} />;
+              return (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={3} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'pentagon') {
-              return <RegularPolygon {...childProps} sides={5} radius={child.width / 2} />;
+              return (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={5} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'hexagon') {
-              return <RegularPolygon {...childProps} sides={6} radius={child.width / 2} />;
+              return (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={6} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'octagon') {
-              return <RegularPolygon {...childProps} sides={8} radius={child.width / 2} />;
+              return (
+                <RegularPolygon 
+                  {...childProps} 
+                  sides={8} 
+                  radius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'star') {
-              return <Star {...childProps} numPoints={5} innerRadius={child.width / 4} outerRadius={child.width / 2} />;
+              return (
+                <Star 
+                  {...childProps} 
+                  numPoints={5} 
+                  innerRadius={child.width / 4} 
+                  outerRadius={child.width / 2}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'arc') {
-              return <Arc {...childProps} innerRadius={child.width / 4} outerRadius={child.width / 2} angle={180} />;
+              return (
+                <Arc 
+                  {...childProps} 
+                  innerRadius={child.width / 4} 
+                  outerRadius={child.width / 2} 
+                  angle={180}
+                  width={undefined}
+                  height={undefined}
+                />
+              );
             } else if (child.type === 'line') {
-              return <Line {...childProps} points={[0, 0, child.width, 0]} stroke={child.color} strokeWidth={child.height || 2} />;
+              return (
+                <Line 
+                  {...childProps} 
+                  points={[0, 0, child.width, 0]} 
+                  stroke={child.color} 
+                  strokeWidth={child.height || 2}
+                  fill={undefined}
+                />
+              );
             } else if (child.type === 'text') {
-              return <Text {...childProps} text={child.text || child.label} fontSize={16} fill={child.color} />;
+              return (
+                <Text 
+                  {...childProps} 
+                  text={child.text || child.label || 'Text'} 
+                  fontSize={child.fontSize || 16}
+                  fill={child.color}
+                  width={child.width}
+                  height={child.height}
+                  align="center"
+                  verticalAlign="middle"
+                  stroke={undefined}
+                  strokeWidth={0}
+                />
+              );
             } else {
+              // Default rectangle for square and unknown types
               return <Rect {...childProps} />;
             }
           })}
