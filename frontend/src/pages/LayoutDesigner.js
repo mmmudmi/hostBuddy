@@ -30,6 +30,7 @@ const LayoutDesigner = () => {
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
   const [editingTextId, setEditingTextId] = useState(null);
   const [editingText, setEditingText] = useState('');
+  const [editingChildElement, setEditingChildElement] = useState(null);
   const [showColorPicker, setShowColorPicker] = useState(false);
   const [showBorderControls, setShowBorderControls] = useState(false);
   
@@ -149,6 +150,12 @@ const LayoutDesigner = () => {
     
     setLayoutElements(prev => [...prev, newElement]);
     setHasUnsavedChanges(true);
+    
+    // Clear any persistent border control states when adding new elements
+    setSelectedBorderWidth(null);
+    setSelectedBorderColor(null);
+    setHoveredBorderWidth(null);
+    setHoveredBorderColor(null);
   };
 
   const handleSelect = (id, event) => {
@@ -162,6 +169,9 @@ const LayoutDesigner = () => {
         setSelectedIds([selectedId, id]);
         setSelectedId(null);
         updateTempGroupBounds([selectedId, id]);
+        // Clear border control states for multi-selection
+        setSelectedBorderWidth(null);
+        setSelectedBorderColor(null);
       } else if (isMultiSelect) {
         // Add/remove from existing multi-selection
         setSelectedIds(prev => {
@@ -177,6 +187,13 @@ const LayoutDesigner = () => {
               setSelectedId(newSelection[0]);
               setIsMultiSelect(false);
               setTempGroupBounds(null);
+              
+              // Update border control states for single selection
+              const selectedElement = layoutElements.find(el => el.id === newSelection[0]);
+              if (selectedElement) {
+                setSelectedBorderWidth(selectedElement.borderWidth || null);
+                setSelectedBorderColor(selectedElement.borderColor || null);
+              }
             }
           } else {
             // Add to selection
@@ -186,6 +203,9 @@ const LayoutDesigner = () => {
           // Update temporary group bounds
           if (newSelection.length > 1) {
             updateTempGroupBounds(newSelection);
+            // Clear border control states for multi-selection
+            setSelectedBorderWidth(null);
+            setSelectedBorderColor(null);
           } else {
             setTempGroupBounds(null);
           }
@@ -198,6 +218,13 @@ const LayoutDesigner = () => {
         setSelectedIds([]);
         setIsMultiSelect(false);
         setTempGroupBounds(null);
+        
+        // Update border control states to match the selected element's properties
+        const selectedElement = layoutElements.find(el => el.id === id);
+        if (selectedElement) {
+          setSelectedBorderWidth(selectedElement.borderWidth || null);
+          setSelectedBorderColor(selectedElement.borderColor || null);
+        }
       }
     } else {
       // Normal click - single select mode (clears any existing selection)
@@ -205,6 +232,13 @@ const LayoutDesigner = () => {
       setSelectedIds([]);
       setIsMultiSelect(false);
       setTempGroupBounds(null);
+      
+      // Update border control states to match the selected element's properties
+      const selectedElement = layoutElements.find(el => el.id === id);
+      if (selectedElement) {
+        setSelectedBorderWidth(selectedElement.borderWidth || null);
+        setSelectedBorderColor(selectedElement.borderColor || null);
+      }
     }
   };
 
@@ -213,6 +247,13 @@ const LayoutDesigner = () => {
     setSelectedIds([]);
     setIsMultiSelect(false);
     setTempGroupBounds(null);
+    
+    // Clear border control states when deselecting
+    setSelectedBorderWidth(null);
+    setSelectedBorderColor(null);
+    setHoveredBorderWidth(null);
+    setHoveredBorderColor(null);
+    setShowBorderControls(false);
   };
 
   // Calculate accurate visual bounds for different shape types
@@ -359,15 +400,28 @@ const LayoutDesigner = () => {
   }, []);
 
   // Start editing text
-  const startTextEdit = useCallback((elementId) => {
-    const element = layoutElements.find(el => el.id === elementId);
-    if (element) {
-      setEditingTextId(elementId);
-      // For text elements, use existing text; for other elements, start with existing text or empty
-      if (element.type === 'text') {
-        setEditingText(element.text || element.label || 'Text');
+  const startTextEdit = useCallback((elementId, childElement = null) => {
+    if (childElement) {
+      // Editing a child element within a group
+      setEditingTextId(elementId); // Use the composite ID
+      setEditingChildElement(childElement); // Store the child element reference
+      if (childElement.type === 'text') {
+        setEditingText(childElement.text || childElement.label || 'Text');
       } else {
-        setEditingText(element.text || '');
+        setEditingText(childElement.text || '');
+      }
+    } else {
+      // Regular element editing
+      const element = layoutElements.find(el => el.id === elementId);
+      if (element) {
+        setEditingTextId(elementId);
+        setEditingChildElement(null);
+        // For text elements, use existing text; for other elements, start with existing text or empty
+        if (element.type === 'text') {
+          setEditingText(element.text || element.label || 'Text');
+        } else {
+          setEditingText(element.text || '');
+        }
       }
     }
   }, [layoutElements]);
@@ -376,21 +430,42 @@ const LayoutDesigner = () => {
   const finishTextEdit = useCallback(() => {
     if (editingTextId) {
       const trimmedText = editingText.trim();
-      if (trimmedText) {
-        updateElement(editingTextId, { text: trimmedText });
+      
+      if (editingChildElement) {
+        // Editing a child element within a group
+        const groupId = editingTextId.split('_child_')[0];
+        const groupElement = layoutElements.find(el => el.id === groupId);
+        
+        if (groupElement && groupElement.type === 'group') {
+          const updatedChildren = groupElement.children.map(child => 
+            child.id === editingChildElement.id 
+              ? { ...child, text: trimmedText || undefined }
+              : child
+          );
+          
+          updateElement(groupId, { children: updatedChildren });
+        }
       } else {
-        // Remove text property if empty
-        updateElement(editingTextId, { text: undefined });
+        // Regular element editing
+        if (trimmedText) {
+          updateElement(editingTextId, { text: trimmedText });
+        } else {
+          // Remove text property if empty
+          updateElement(editingTextId, { text: undefined });
+        }
       }
+      
       setEditingTextId(null);
       setEditingText('');
+      setEditingChildElement(null);
     }
-  }, [editingTextId, editingText, updateElement]);
+  }, [editingTextId, editingText, editingChildElement, updateElement, layoutElements]);
 
   // Cancel text editing
   const cancelTextEdit = useCallback(() => {
     setEditingTextId(null);
     setEditingText('');
+    setEditingChildElement(null);
   }, []);
 
   // Change color of selected elements
@@ -412,38 +487,36 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedId, selectedIds, isMultiSelect, updateElement]);
 
-  // Toggle border for selected elements
+  // Clear border for selected elements
   const toggleElementBorder = useCallback(() => {
     if (isMultiSelect && selectedIds.length > 0) {
-      // Toggle border for multiple selected elements
+      // Clear borders for all selected elements
       setLayoutElements(prev => 
         prev.map(element => {
           if (selectedIds.includes(element.id)) {
-            const hasBorder = element.borderWidth && element.borderWidth > 0;
             return {
               ...element,
-              borderWidth: hasBorder ? 0 : 2,
-              // If turning on border, use existing color or default to blue
-              // If turning off border, clear the color to avoid artifacts
-              borderColor: hasBorder ? undefined : (element.borderColor || '#3b82f6')
+              borderWidth: 0,
+              borderColor: 'transparent'
             };
           }
           return element;
         })
       );
     } else if (selectedId) {
-      // Toggle border for single selected element
+      // Clear border for single selected element
       const element = layoutElements.find(el => el.id === selectedId);
       if (element) {
-        const hasBorder = element.borderWidth && element.borderWidth > 0;
         updateElement(selectedId, { 
-          borderWidth: hasBorder ? 0 : 2,
-          // If turning on border, use existing color or default to blue
-          // If turning off border, clear the color to avoid artifacts
-          borderColor: hasBorder ? undefined : (element.borderColor || '#3b82f6')
+          borderWidth: 0,
+          borderColor: 'transparent'
         });
       }
     }
+    
+    // Clear UI state as well
+    setSelectedBorderWidth(null);
+    setSelectedBorderColor(null);
     setHasUnsavedChanges(true);
   }, [selectedId, selectedIds, isMultiSelect, updateElement, layoutElements]);
 
@@ -1249,6 +1322,12 @@ const LayoutDesigner = () => {
             return el;
           })
         );
+      } else {
+        // Single element movement - update position in real-time so text follows
+        updateElement(element.id, {
+          x: e.target.x(),
+          y: e.target.y(),
+        });
       }
     };
 
@@ -1567,8 +1646,6 @@ const LayoutDesigner = () => {
         onTransformEnd: handleTransformEnd, // Add transform handler for groups
         onClick: (e) => handleSelect(element.id, e.evt),
         onTap: (e) => handleSelect(element.id, e.evt),
-        onDblClick: () => startTextEdit(element.id),
-        onDblTap: () => startTextEdit(element.id),
       };
 
       // Render group as a container with its children
@@ -1602,11 +1679,23 @@ const LayoutDesigner = () => {
               fill: child.color,
               stroke: child.borderColor || '#000000',
               strokeWidth: child.borderWidth || 0,
-              listening: false, // Group handles interaction
+              listening: true, // Allow children to be interactive
+              onClick: (e) => {
+                e.cancelBubble = true; // Prevent event from bubbling to group
+                handleSelect(element.id, e.evt); // Select the group but focus on child
+              },
+              onDblClick: (e) => {
+                e.cancelBubble = true; // Prevent event from bubbling to group
+                // Create a temporary child element ID for text editing
+                const childElementId = `${element.id}_child_${child.id}`;
+                startTextEdit(childElementId, child);
+              },
             };
             
+            let childShape;
+            
             if (child.type === 'round') {
-              return (
+              childShape = (
                 <Circle 
                   {...childProps} 
                   radius={child.width / 2}
@@ -1615,7 +1704,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'ellipse') {
-              return (
+              childShape = (
                 <Ellipse 
                   {...childProps} 
                   radiusX={child.width / 2} 
@@ -1625,7 +1714,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'triangle') {
-              return (
+              childShape = (
                 <RegularPolygon 
                   {...childProps} 
                   sides={3} 
@@ -1635,7 +1724,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'pentagon') {
-              return (
+              childShape = (
                 <RegularPolygon 
                   {...childProps} 
                   sides={5} 
@@ -1645,7 +1734,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'hexagon') {
-              return (
+              childShape = (
                 <RegularPolygon 
                   {...childProps} 
                   sides={6} 
@@ -1655,7 +1744,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'octagon') {
-              return (
+              childShape = (
                 <RegularPolygon 
                   {...childProps} 
                   sides={8} 
@@ -1665,7 +1754,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'star') {
-              return (
+              childShape = (
                 <Star 
                   {...childProps} 
                   numPoints={5} 
@@ -1676,7 +1765,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'arc') {
-              return (
+              childShape = (
                 <Arc 
                   {...childProps} 
                   innerRadius={child.width / 4} 
@@ -1687,7 +1776,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'line') {
-              return (
+              childShape = (
                 <Line 
                   {...childProps} 
                   points={[0, 0, child.width, 0]} 
@@ -1697,7 +1786,7 @@ const LayoutDesigner = () => {
                 />
               );
             } else if (child.type === 'text') {
-              return (
+              childShape = (
                 <Text 
                   {...childProps} 
                   text={child.text || child.label || 'Text'} 
@@ -1713,8 +1802,46 @@ const LayoutDesigner = () => {
               );
             } else {
               // Default rectangle for square and unknown types
-              return <Rect {...childProps} />;
+              childShape = <Rect {...childProps} />;
             }
+            
+            return (
+              <React.Fragment key={child.id}>
+                {childShape}
+                {child.type !== 'text' && child.type !== 'line' && child.text && (
+                  <Text
+                    x={
+                      // For centered shapes (circles, polygons, stars, arcs), x is already the center
+                      ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(child.type)
+                        ? child.x
+                        : child.x + child.width / 2  // For rectangles, x is top-left, so add half width
+                    }
+                    y={
+                      // For centered shapes, y is already the center
+                      ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(child.type)
+                        ? child.y
+                        : child.y + child.height / 2  // For rectangles, y is top-left, so add half height
+                    }
+                    text={child.text}
+                    fontSize={14}
+                    fill="white"
+                    fontStyle="bold"
+                    align="center"
+                    verticalAlign="middle"
+                    width={100}  // Set a width for the text area
+                    height={30}  // Set a height for the text area
+                    offsetX={50}  // Offset by half the width to center horizontally
+                    offsetY={15}  // Offset by half the height to center vertically
+                    listening={false}
+                    // Add text shadow for better visibility
+                    shadowColor="rgba(0, 0, 0, 0.5)"
+                    shadowBlur={2}
+                    shadowOffsetX={0.2}
+                    shadowOffsetY={0.2}
+                  />
+                )}
+              </React.Fragment>
+            );
           })}
         </Group>
       );
@@ -1843,7 +1970,7 @@ const LayoutDesigner = () => {
                 disabled={isSaving}
                 className="btn btn-primary btn-small"
               >
-                {isSaving ? 'Saving...' : 'Save Layout'}
+                {isSaving ? 'Saving...' : 'Save'}
               </button>
               <button 
                 onClick={exportToPNG}
@@ -2206,6 +2333,31 @@ const LayoutDesigner = () => {
                     listening={true}
                     draggable={true}
                     name="temp-group-bounds"
+                    onDragMove={(e) => {
+                      // Real-time movement of temp group bounds and elements
+                      const deltaX = e.target.x() - tempGroupBounds.x;
+                      const deltaY = e.target.y() - tempGroupBounds.y;
+                      
+                      // Update all selected elements in real-time
+                      setLayoutElements(prev => 
+                        prev.map(element => 
+                          selectedIds.includes(element.id)
+                            ? { ...element, x: element.x + deltaX, y: element.y + deltaY }
+                            : element
+                        )
+                      );
+                      
+                      // Update temp group bounds position in real-time
+                      setTempGroupBounds(prev => ({
+                        ...prev,
+                        x: e.target.x(),
+                        y: e.target.y()
+                      }));
+                      
+                      // Keep the rect at its original position to avoid double movement
+                      e.target.x(tempGroupBounds.x);
+                      e.target.y(tempGroupBounds.y);
+                    }}
                     onDragEnd={(e) => {
                       // Handle temp group drag - move all selected elements
                       const deltaX = e.target.x() - tempGroupBounds.x;
@@ -2588,6 +2740,8 @@ const styles = {
     borderRadius: '6px',
     fontSize: '14px',
     width: '200px',
+    height: '28px',
+    boxSizing: 'border-box',
   },
   unsavedIndicator: {
     color: '#f59e0b',
