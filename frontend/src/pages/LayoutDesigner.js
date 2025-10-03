@@ -63,6 +63,15 @@ const LayoutDesigner = () => {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
+  // Zoom and pan state
+  const [stageScale, setStageScale] = useState(1);
+  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
+  const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
+  const STAGE_WIDTH = 800;
+  const STAGE_HEIGHT = 600;
+  const MIN_ZOOM = 0.7;
+  const MAX_ZOOM = 3;
+
   // Available color options
   const colorOptions = [
     '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#fbbf24', '#f97316',
@@ -334,8 +343,49 @@ const LayoutDesigner = () => {
 
     if (customElement.element_data.type === 'group') {
       const elements = customElement.element_data.elements || [];
+      const wasOriginallyMerged = customElement.element_data.isFromGrouped && 
+                                 customElement.element_data.originalType === 'merged';
       
-      // Always create a merged element when custom element is picked
+      // Special case: if it's a single merged element, restore it directly
+      if (wasOriginallyMerged && elements.length === 1 && elements[0].type === 'merged') {
+        const originalMerged = elements[0];
+        const restoredMerged = {
+          ...originalMerged,
+          id: `merged_${Date.now()}`,
+          x: 100, // Base position
+          y: 100, // Base position
+          // Give new IDs to children to avoid conflicts
+          children: originalMerged.children ? originalMerged.children.map(child => ({
+            ...child,
+            id: `${Date.now()}-${Math.random()}`
+          })) : []
+        };
+        
+        setLayoutElements(prev => [...prev, restoredMerged]);
+        setHasUnsavedChanges(true);
+        return;
+      }
+      
+      // Special case: if it's a single grouped element, restore it directly
+      if (!wasOriginallyMerged && elements.length === 1 && elements[0].type === 'group') {
+        const originalGroup = elements[0];
+        const restoredGroup = {
+          ...originalGroup,
+          id: `group_${Date.now()}`,
+          x: 100, // Base position
+          y: 100, // Base position
+          // Give new IDs to children to avoid conflicts
+          children: originalGroup.children ? originalGroup.children.map(child => ({
+            ...child,
+            id: `${Date.now()}-${Math.random()}`
+          })) : []
+        };
+        
+        setLayoutElements(prev => [...prev, restoredGroup]);
+        setHasUnsavedChanges(true);
+        return;
+      }
+      
       const baseX = 100; // Base position
       const baseY = 100;
       
@@ -350,51 +400,80 @@ const LayoutDesigner = () => {
         maxY = Math.max(maxY, bounds.maxY);
       });
       
-      const mergedId = `merged_${Date.now()}`;
+      if (wasOriginallyMerged) {
+        // Create merged element if it was originally merged
+        const mergedId = `merged_${Date.now()}`;
+        
+        // Combine text from text elements
+        const combinedText = elements
+          .filter(el => el.type === 'text' && el.text && el.text.trim())
+          .map(el => el.text.trim())
+          .join(' ');
+        
+        // Use border properties from elements that have borders
+        const bordersWithWidth = elements.filter(el => el.borderWidth && el.borderWidth > 0);
+        const borderWidth = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderWidth : 0;
+        const borderColor = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderColor : '#374151';
+        
+        // Calculate the outline path for the merged element
+        const outlinePath = calculateMergedOutlinePath(elements, minX, minY);
+        
+        const mergedElement = {
+          id: mergedId,
+          type: 'merged',
+          x: baseX,
+          y: baseY,
+          width: maxX - minX,
+          height: maxY - minY,
+          color: 'transparent',
+          label: customElement.name || 'Custom Element',
+          rotation: 0,
+          text: combinedText || null,
+          borderWidth: borderWidth,
+          borderColor: borderColor,
+          outlinePath: outlinePath,
+          children: elements.map(el => ({
+            ...el,
+            id: `${Date.now()}-${Math.random()}`,
+            x: el.x - minX,
+            y: el.y - minY,
+            originalText: el.text,
+            text: el.type === 'text' ? el.text : null,
+          })),
+          isMerged: true,
+        };
+        
+        setLayoutElements(prev => [...prev, mergedElement]);
+      } else {
+        // Create group element if it was originally just selected elements
+        const groupId = `group_${Date.now()}`;
+        
+        const groupElement = {
+          id: groupId,
+          type: 'group',
+          x: baseX,
+          y: baseY,
+          width: maxX - minX,
+          height: maxY - minY,
+          color: 'transparent',
+          label: customElement.name || 'Custom Element',
+          rotation: 0,
+          borderWidth: 0,
+          borderColor: 'transparent',
+          children: elements.map(el => ({
+            ...el,
+            id: `${Date.now()}-${Math.random()}`,
+            x: el.x - minX,
+            y: el.y - minY,
+            originalText: el.text,
+            text: el.type === 'text' ? el.text : null,
+          })),
+          isGrouped: true,
+        };
+        
+        setLayoutElements(prev => [...prev, groupElement]);
+      }
       
-      // Combine text from text elements
-      const combinedText = elements
-        .filter(el => el.type === 'text' && el.text && el.text.trim())
-        .map(el => el.text.trim())
-        .join(' ');
-      
-      // Use border properties from elements that have borders
-      const bordersWithWidth = elements.filter(el => el.borderWidth && el.borderWidth > 0);
-      const borderWidth = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderWidth : 0;
-      const borderColor = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderColor : '#374151';
-      
-      // Calculate the outline path for the merged element
-      const outlinePath = calculateMergedOutlinePath(elements, minX, minY);
-      
-      // Create merged element with children positioned relative to the container
-      const mergedElement = {
-        id: mergedId,
-        type: 'merged',
-        x: baseX,
-        y: baseY,
-        width: maxX - minX,
-        height: maxY - minY,
-        color: 'transparent',
-        label: customElement.name || 'Custom Element',
-        rotation: 0,
-        text: combinedText || null,
-        borderWidth: borderWidth,
-        borderColor: borderColor,
-        outlinePath: outlinePath, // Store the calculated outline path
-        // Store original elements as children with relative coordinates
-        children: elements.map(el => ({
-          ...el,
-          id: `${Date.now()}-${Math.random()}`, // Give new IDs to children
-          // Keep relative coordinates within the merged container
-          x: el.x - minX,
-          y: el.y - minY,
-          originalText: el.text,
-          text: el.type === 'text' ? el.text : null,
-        })),
-        isMerged: true,
-      };
-      
-      setLayoutElements(prev => [...prev, mergedElement]);
       setHasUnsavedChanges(true);
     } else {
       // Add single element
@@ -1540,6 +1619,269 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedId, layoutElements]);
 
+  // Boundary constraint function to keep view within grid
+  const clampStagePosition = useCallback((pos, scale) => {
+    // Calculate the bounds of the scaled stage
+    const scaledStageWidth = STAGE_WIDTH * scale;
+    const scaledStageHeight = STAGE_HEIGHT * scale;
+    
+    // When zoomed out (stage smaller than container), center it
+    if (scaledStageWidth <= STAGE_WIDTH && scaledStageHeight <= STAGE_HEIGHT) {
+      return {
+        x: (STAGE_WIDTH - scaledStageWidth) / 2,
+        y: (STAGE_HEIGHT - scaledStageHeight) / 2
+      };
+    }
+    
+    // When zoomed in, use more flexible boundary constraints
+    // Allow some overshoot for better cursor-based zooming feel
+    const tolerance = 20; // pixels of tolerance for smoother zooming
+    
+    // Calculate bounds with tolerance
+    const maxX = tolerance;
+    const minX = STAGE_WIDTH - scaledStageWidth - tolerance;
+    const maxY = tolerance;
+    const minY = STAGE_HEIGHT - scaledStageHeight - tolerance;
+    
+    // Apply soft clamping - only enforce strict bounds if we're way outside
+    let clampedX = pos.x;
+    let clampedY = pos.y;
+    
+    // Horizontal clamping
+    if (scaledStageWidth > STAGE_WIDTH) {
+      if (pos.x > maxX) {
+        clampedX = Math.min(pos.x, maxX);
+      } else if (pos.x < minX) {
+        clampedX = Math.max(pos.x, minX);
+      }
+    } else {
+      clampedX = (STAGE_WIDTH - scaledStageWidth) / 2;
+    }
+    
+    // Vertical clamping
+    if (scaledStageHeight > STAGE_HEIGHT) {
+      if (pos.y > maxY) {
+        clampedY = Math.min(pos.y, maxY);
+      } else if (pos.y < minY) {
+        clampedY = Math.max(pos.y, minY);
+      }
+    } else {
+      clampedY = (STAGE_HEIGHT - scaledStageHeight) / 2;
+    }
+    
+    return { x: clampedX, y: clampedY };
+  }, [STAGE_WIDTH, STAGE_HEIGHT]);
+
+  // Zoom functionality
+  const handleWheel = useCallback((e) => {
+    e.evt.preventDefault();
+    
+    const scaleBy = 1.1;
+    const stage = stageRef.current;
+    const oldScale = stage.scaleX();
+    const pointer = stage.getPointerPosition();
+    
+    let newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
+    newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
+    
+    // Calculate the point in stage coordinates that should remain stationary
+    const mousePointTo = {
+      x: (pointer.x - stage.x()) / oldScale,
+      y: (pointer.y - stage.y()) / oldScale,
+    };
+    
+    // Calculate new position to keep the point under cursor stationary
+    let newPos = {
+      x: pointer.x - mousePointTo.x * newScale,
+      y: pointer.y - mousePointTo.y * newScale,
+    };
+    
+    // Allow some padding around the canvas for more natural zooming
+    const padding = 100; // Allow 100px of empty space around the canvas
+    const scaledStageWidth = STAGE_WIDTH * newScale;
+    const scaledStageHeight = STAGE_HEIGHT * newScale;
+    
+    // Calculate boundaries with padding allowance
+    const maxX = padding;
+    const minX = STAGE_WIDTH - scaledStageWidth - padding;
+    const maxY = padding;
+    const minY = STAGE_HEIGHT - scaledStageHeight - padding;
+    
+    // Only apply boundaries if we're zoomed in enough that the stage is larger than container
+    if (scaledStageWidth > STAGE_WIDTH) {
+      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
+    } else {
+      // When zoomed out, center the stage
+      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
+    }
+    
+    if (scaledStageHeight > STAGE_HEIGHT) {
+      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
+    } else {
+      // When zoomed out, center the stage
+      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
+    }
+    
+    setStageScale(newScale);
+    setStagePos(newPos);
+  }, [MIN_ZOOM, MAX_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
+
+  const zoomIn = useCallback(() => {
+    const stage = stageRef.current;
+    const oldScale = stage.scaleX();
+    const newScale = Math.min(MAX_ZOOM, oldScale * 1.2);
+    
+    // Try to get cursor position, fall back to center if not available
+    const pointer = stage.getPointerPosition();
+    let centerX, centerY;
+    
+    if (pointer) {
+      // Zoom at cursor position
+      centerX = pointer.x;
+      centerY = pointer.y;
+    } else {
+      // Fall back to center of canvas
+      centerX = STAGE_WIDTH / 2;
+      centerY = STAGE_HEIGHT / 2;
+    }
+    
+    const mousePointTo = {
+      x: (centerX - stage.x()) / oldScale,
+      y: (centerY - stage.y()) / oldScale,
+    };
+    
+    let newPos = {
+      x: centerX - mousePointTo.x * newScale,
+      y: centerY - mousePointTo.y * newScale,
+    };
+    
+    // Allow padding around the canvas for more natural zooming
+    const padding = 100;
+    const scaledStageWidth = STAGE_WIDTH * newScale;
+    const scaledStageHeight = STAGE_HEIGHT * newScale;
+    
+    if (scaledStageWidth > STAGE_WIDTH) {
+      const maxX = padding;
+      const minX = STAGE_WIDTH - scaledStageWidth - padding;
+      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
+    } else {
+      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
+    }
+    
+    if (scaledStageHeight > STAGE_HEIGHT) {
+      const maxY = padding;
+      const minY = STAGE_HEIGHT - scaledStageHeight - padding;
+      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
+    } else {
+      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
+    }
+    
+    setStageScale(newScale);
+    setStagePos(newPos);
+  }, [MAX_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
+
+  const zoomOut = useCallback(() => {
+    const stage = stageRef.current;
+    const oldScale = stage.scaleX();
+    const newScale = Math.max(MIN_ZOOM, oldScale / 1.2);
+    
+    // Try to get cursor position, fall back to center if not available
+    const pointer = stage.getPointerPosition();
+    let centerX, centerY;
+    
+    if (pointer) {
+      // Zoom at cursor position
+      centerX = pointer.x;
+      centerY = pointer.y;
+    } else {
+      // Fall back to center of canvas
+      centerX = STAGE_WIDTH / 2;
+      centerY = STAGE_HEIGHT / 2;
+    }
+    
+    const mousePointTo = {
+      x: (centerX - stage.x()) / oldScale,
+      y: (centerY - stage.y()) / oldScale,
+    };
+    
+    let newPos = {
+      x: centerX - mousePointTo.x * newScale,
+      y: centerY - mousePointTo.y * newScale,
+    };
+    
+    // Allow padding around the canvas for more natural zooming
+    const padding = 100;
+    const scaledStageWidth = STAGE_WIDTH * newScale;
+    const scaledStageHeight = STAGE_HEIGHT * newScale;
+    
+    if (scaledStageWidth > STAGE_WIDTH) {
+      const maxX = padding;
+      const minX = STAGE_WIDTH - scaledStageWidth - padding;
+      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
+    } else {
+      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
+    }
+    
+    if (scaledStageHeight > STAGE_HEIGHT) {
+      const maxY = padding;
+      const minY = STAGE_HEIGHT - scaledStageHeight - padding;
+      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
+    } else {
+      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
+    }
+    
+    setStageScale(newScale);
+    setStagePos(newPos);
+  }, [MIN_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
+
+  const fitToCanvas = useCallback(() => {
+    if (layoutElements.length === 0) {
+      // If no elements, just reset to 1:1 scale centered
+      const clampedPos = clampStagePosition({ x: 0, y: 0 }, 1);
+      setStageScale(1);
+      setStagePos(clampedPos);
+      return;
+    }
+
+    // Calculate bounding box of all elements
+    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+    
+    layoutElements.forEach(element => {
+      const left = element.x;
+      const top = element.y;
+      const right = element.x + element.width;
+      const bottom = element.y + element.height;
+      
+      minX = Math.min(minX, left);
+      minY = Math.min(minY, top);
+      maxX = Math.max(maxX, right);
+      maxY = Math.max(maxY, bottom);
+    });
+
+    const contentWidth = maxX - minX;
+    const contentHeight = maxY - minY;
+    
+    // Add some padding
+    const padding = 50;
+    const scaleX = (STAGE_WIDTH - padding * 2) / contentWidth;
+    const scaleY = (STAGE_HEIGHT - padding * 2) / contentHeight;
+    const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100%
+    
+    // Center the content
+    const centerX = (minX + maxX) / 2;
+    const centerY = (minY + maxY) / 2;
+    
+    const newPos = {
+      x: STAGE_WIDTH / 2 - centerX * scale,
+      y: STAGE_HEIGHT / 2 - centerY * scale,
+    };
+    
+    const clampedPos = clampStagePosition(newPos, scale);
+    
+    setStageScale(scale);
+    setStagePos(clampedPos);
+  }, [layoutElements, STAGE_WIDTH, STAGE_HEIGHT, clampStagePosition]);
+
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
     // Don't handle shortcuts when editing text
@@ -1642,6 +1984,22 @@ const LayoutDesigner = () => {
       }
     }
     
+    // Zoom shortcuts
+    if (isCtrlOrCmd && (event.key === '=' || event.key === '+')) {
+      event.preventDefault();
+      zoomIn();
+    }
+    
+    if (isCtrlOrCmd && (event.key === '-' || event.key === '_')) {
+      event.preventDefault();
+      zoomOut();
+    }
+    
+    if (isCtrlOrCmd && event.key === '0') {
+      event.preventDefault();
+      fitToCanvas();
+    }
+    
     // Delete key - only prevent default if we have elements selected
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
@@ -1649,7 +2007,7 @@ const LayoutDesigner = () => {
         deleteElement();
       }
     }
-  }, [editingTextId, groupElements, ungroupElements, mergeElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length, layoutElements]);
+  }, [editingTextId, groupElements, ungroupElements, mergeElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length, layoutElements, zoomIn, zoomOut, fitToCanvas]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -1871,12 +2229,28 @@ const LayoutDesigner = () => {
         shape.strokeWidth(0);
       });
       
+      // Create a temporary white background rectangle
+      const backgroundRect = new window.Konva.Rect({
+        x: 0,
+        y: 0,
+        width: STAGE_WIDTH,
+        height: STAGE_HEIGHT,
+        fill: '#ffffff',
+        listening: false,
+        name: 'temp-background'
+      });
+      
+      // Add background rectangle as the first element (bottom layer)
+      layer.add(backgroundRect);
+      backgroundRect.zIndex(0);
+      
       layer.batchDraw();
       
       // Calculate bounding box of all layout elements
       if (layoutElements.length === 0) {
         alert('No elements to export');
-        // Restore everything
+        // Remove background rectangle and restore everything
+        backgroundRect.destroy();
         gridElements.forEach(element => element.visible(true));
         layer.batchDraw();
         return;
@@ -1906,10 +2280,13 @@ const LayoutDesigner = () => {
         maxY = Math.max(maxY, bottom);
       });
       
-      // Export full canvas (800x600) instead of cropping
+      // Export full canvas (800x600) with white background
       const dataURL = stageRef.current.toDataURL({ 
         pixelRatio: 2
       });
+      
+      // Remove the temporary background rectangle
+      backgroundRect.destroy();
       
       // Restore grid elements and selection styling
       gridElements.forEach(element => element.visible(true));
@@ -1945,23 +2322,42 @@ const LayoutDesigner = () => {
         shape.strokeWidth(0);
       });
       
+      // Create a temporary white background rectangle
+      const backgroundRect = new window.Konva.Rect({
+        x: 0,
+        y: 0,
+        width: STAGE_WIDTH,
+        height: STAGE_HEIGHT,
+        fill: '#ffffff',
+        listening: false,
+        name: 'temp-background'
+      });
+      
+      // Add background rectangle as the first element (bottom layer)
+      layer.add(backgroundRect);
+      backgroundRect.zIndex(0);
+      
       layer.batchDraw();
       
       // Check if there are any elements (optional warning)
       if (layoutElements.length === 0) {
         const proceed = window.confirm('No elements found. Export empty canvas?');
         if (!proceed) {
-          // Restore everything
+          // Remove background rectangle and restore everything
+          backgroundRect.destroy();
           gridElements.forEach(element => element.visible(true));
           layer.batchDraw();
           return;
         }
       }
       
-      // Export full canvas (800x600) instead of cropping
+      // Export full canvas (800x600) with white background
       const dataURL = stageRef.current.toDataURL({ 
         pixelRatio: 2
       });
+      
+      // Remove the temporary background rectangle
+      backgroundRect.destroy();
       
       // Restore grid elements and selection styling
       gridElements.forEach(element => element.visible(true));
@@ -3085,6 +3481,47 @@ const LayoutDesigner = () => {
               </button>
             </>
           )}
+          
+          {/* Zoom Controls - Always visible */}
+          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px' }}>
+            <button 
+              onClick={zoomOut}
+              className="btn btn-small"
+              title="Zoom out (Ctrl/Cmd + -)"
+              style={{
+                padding: '4px 8px',
+                fontSize: '14px'
+              }}
+            >
+              🔍−
+            </button>
+            <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '45px', textAlign: 'center' }}>
+              {Math.round(stageScale * 100)}%
+            </span>
+            <button 
+              onClick={zoomIn}
+              className="btn btn-small"
+              title="Zoom in (Ctrl/Cmd + +)"
+              style={{
+                padding: '4px 8px',
+                fontSize: '14px'
+              }}
+            >
+              🔍+
+            </button>
+            <button 
+              onClick={fitToCanvas}
+              className="btn btn-small"
+              title="Fit to canvas (Ctrl/Cmd + 0)"
+              style={{
+                padding: '4px 8px',
+                fontSize: '12px'
+              }}
+            >
+              ⊡
+            </button>
+          </div>
+          
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
               {/* Combined Style Controls Dropdown */}
@@ -3453,6 +3890,9 @@ const LayoutDesigner = () => {
                       <div style={{ marginBottom: '4px' }}><strong>Send to Back:</strong> Ctrl/Cmd + Shift + [</div>
                       <div style={{ marginBottom: '4px' }}><strong>Bring Forward:</strong> Ctrl/Cmd + ]</div>
                       <div style={{ marginBottom: '4px' }}><strong>Send Backward:</strong> Ctrl/Cmd + [</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Zoom In:</strong> Ctrl/Cmd + + or Mouse Wheel</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Zoom Out:</strong> Ctrl/Cmd + - or Mouse Wheel</div>
+                      <div style={{ marginBottom: '4px' }}><strong>Fit to Canvas:</strong> Ctrl/Cmd + 0</div>
                     </div>
                   </div>
                 )}
@@ -3565,11 +4005,13 @@ const LayoutDesigner = () => {
                                 (() => {
                                   const elements = element.element_data.elements;
                                   console.log('🖼️ Rendering thumbnail for:', element.name, 'Elements:', elements.length);
+                                  console.log('🔍 Elements details:', elements.map(el => ({ type: el.type, borderWidth: el.borderWidth, borderColor: el.borderColor })));
                                   
                                   // Handle merged elements specially
                                   if (elements.length === 1 && elements[0].type === 'merged' && elements[0].children) {
                                     console.log('📦 Merged element detected, using children');
                                     const mergedChildren = elements[0].children;
+                                    console.log('🔍 Merged children details:', mergedChildren.map(child => ({ type: child.type, borderWidth: child.borderWidth, borderColor: child.borderColor })));
                                     
                                     // Calculate bounds for merged children
                                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -3624,13 +4066,120 @@ const LayoutDesigner = () => {
                                       const scaledWidth = (child.width || 20) * scale;
                                       const scaledHeight = (child.height || 20) * scale;
                                       
+                                      const hasValidBorder = child.borderWidth && child.borderWidth > 0;
+                                      const borderColor = hasValidBorder ? (child.borderColor || '#000000') : 'transparent';
+                                      // Make border more visible by ensuring contrast
+                                      const effectiveBorderColor = hasValidBorder ? 
+                                        (borderColor === 'transparent' || borderColor === child.color ? '#000000' : borderColor) : 'transparent';
+                                      
                                       const props = {
                                         key: `merged-thumb-${idx}`,
                                         x: scaledX,
                                         y: scaledY,
                                         fill: child.color || '#9ca3af',
-                                        stroke: child.borderColor || 'transparent',
-                                        strokeWidth: Math.max((child.borderWidth || 0) * scale, 0),
+                                        stroke: effectiveBorderColor,
+                                        strokeWidth: hasValidBorder ? Math.max(child.borderWidth * scale, 1.5) : 0,
+                                        listening: false
+                                      };
+                                                                          
+                                      // Render child shapes - handle ALL shape types
+                                      if (child.type === 'arc') {
+                                        return <Arc {...props} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} angle={180} />;
+                                      } else if (child.type === 'star') {
+                                        return <Star {...props} numPoints={5} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} />;
+                                      } else if (child.type === 'round') {
+                                        return <Circle {...props} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'ellipse') {
+                                        return <Ellipse {...props} radiusX={scaledWidth / 2} radiusY={scaledHeight / 2} />;
+                                      } else if (child.type === 'triangle') {
+                                        return <RegularPolygon {...props} sides={3} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'pentagon') {
+                                        return <RegularPolygon {...props} sides={5} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'hexagon') {
+                                        return <RegularPolygon {...props} sides={6} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'octagon') {
+                                        return <RegularPolygon {...props} sides={8} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'line') {
+                                        return <Line {...props} points={[0, 0, scaledWidth, 0]} stroke={child.color || '#000000'} strokeWidth={Math.max((child.height || 2) * scale, 1)} fill={undefined} />;
+                                      } else if (child.type === 'text') {
+                                        return <Text {...props} text={(child.text || 'Text').substring(0, 8)} fontSize={Math.max((child.fontSize || 16) * scale, 8)} width={scaledWidth} height={scaledHeight} />;
+                                      } else {
+                                        // Default rectangle for square, rectangle, and unknown types
+                                        return <Rect {...props} width={scaledWidth} height={scaledHeight} />;
+                                      }
+                                    });
+                                  } else if (elements.length === 1 && elements[0].type === 'group' && elements[0].children) {
+                                    // Handle grouped elements specially - render the children directly
+                                    console.log('📋 Grouped element detected, using children');
+                                    const groupedChildren = elements[0].children;
+                                    console.log('🔍 Grouped children details:', groupedChildren.map(child => ({ type: child.type, borderWidth: child.borderWidth, borderColor: child.borderColor })));
+                                    
+                                    // Calculate bounds for grouped children (same logic as merged)
+                                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                                    groupedChildren.forEach(child => {
+                                      const x = child.x || 0;
+                                      const y = child.y || 0;
+                                      const w = child.width || 20;
+                                      const h = child.height || 20;
+                                      
+                                      // Calculate proper bounds based on shape type
+                                      if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
+                                          child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
+                                          child.type === 'octagon') {
+                                        // Centered shapes - x,y is the center point
+                                        const radius = Math.max(w, h) / 2;
+                                        minX = Math.min(minX, x - radius);
+                                        minY = Math.min(minY, y - radius);
+                                        maxX = Math.max(maxX, x + radius);
+                                        maxY = Math.max(maxY, y + radius);
+                                      } else {
+                                        // Rectangle-based shapes - x,y is top-left corner
+                                        minX = Math.min(minX, x);
+                                        minY = Math.min(minY, y);
+                                        maxX = Math.max(maxX, x + w);
+                                        maxY = Math.max(maxY, y + h);
+                                      }
+                                    });
+                                    
+                                    const boundingWidth = Math.max(maxX - minX, 20);
+                                    const boundingHeight = Math.max(maxY - minY, 20);
+                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
+                                    const offsetX = (60 - boundingWidth * scale) / 2;
+                                    const offsetY = (60 - boundingHeight * scale) / 2;
+                                    
+                                    console.log('📐 Grouped bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
+                                    
+                                    return groupedChildren.map((child, idx) => {
+                                      // For centered shapes, adjust positioning
+                                      let scaledX, scaledY;
+                                      if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
+                                          child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
+                                          child.type === 'octagon' ) {
+                                        // Centered shapes - keep them centered
+                                        scaledX = (child.x - minX) * scale + offsetX;
+                                        scaledY = (child.y - minY) * scale + offsetY;
+                                      } else {
+                                        // Corner-based shapes
+                                        scaledX = (child.x - minX) * scale + offsetX;
+                                        scaledY = (child.y - minY) * scale + offsetY;
+                                      }
+                                      
+                                      const scaledWidth = (child.width || 20) * scale;
+                                      const scaledHeight = (child.height || 20) * scale;
+                                      
+                                      const hasValidBorder = child.borderWidth && child.borderWidth > 0;
+                                      const borderColor = hasValidBorder ? (child.borderColor || '#000000') : 'transparent';
+                                      // Make border more visible by ensuring contrast
+                                      const effectiveBorderColor = hasValidBorder ? 
+                                        (borderColor === 'transparent' || borderColor === child.color ? '#000000' : borderColor) : 'transparent';
+                                      
+                                      const props = {
+                                        key: `group-thumb-${idx}`,
+                                        x: scaledX,
+                                        y: scaledY,
+                                        fill: child.color || '#9ca3af',
+                                        stroke: effectiveBorderColor,
+                                        strokeWidth: hasValidBorder ? Math.max(child.borderWidth * scale, 1.5) : 0,
                                         listening: false
                                       };
                                                                             
@@ -3698,13 +4247,19 @@ const LayoutDesigner = () => {
                                       const scaledWidth = (el.width || 20) * scale;
                                       const scaledHeight = (el.height || 20) * scale;
                                       
+                                      const hasValidBorder = el.borderWidth && el.borderWidth > 0;
+                                      const borderColor = hasValidBorder ? (el.borderColor || '#000000') : 'transparent';
+                                      // Make border more visible by ensuring contrast
+                                      const effectiveBorderColor = hasValidBorder ? 
+                                        (borderColor === 'transparent' || borderColor === el.color ? '#000000' : borderColor) : 'transparent';
+                                      
                                       const props = {
                                         key: `thumb-${idx}`,
                                         x: scaledX,
                                         y: scaledY,
                                         fill: el.color || '#9ca3af',
-                                        stroke: el.borderColor || 'transparent',
-                                        strokeWidth: Math.max((el.borderWidth || 0) * scale, 0),
+                                        stroke: effectiveBorderColor,
+                                        strokeWidth: hasValidBorder ? Math.max(el.borderWidth * scale, 1.5) : 0,
                                         listening: false
                                       };
                                                                             
@@ -3834,8 +4389,13 @@ const LayoutDesigner = () => {
         <div className="layout-canvas" style={styles.canvas}>
           <Stage
             ref={stageRef}
-            width={800}
-            height={600}
+            width={STAGE_WIDTH}
+            height={STAGE_HEIGHT}
+            scaleX={stageScale}
+            scaleY={stageScale}
+            x={stagePos.x}
+            y={stagePos.y}
+            onWheel={handleWheel}
             onMouseDown={(e) => {
               if (e.target === e.target.getStage()) {
                 handleDeselect();
