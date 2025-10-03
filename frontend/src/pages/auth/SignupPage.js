@@ -81,7 +81,7 @@ const SignupPage = () => {
     const result = await dispatch(registerUser({
       email: formData.email,
       password: formData.password,
-      full_name: formData.full_name,
+      name: formData.full_name,
     }));
     
     if (registerUser.fulfilled.match(result)) {

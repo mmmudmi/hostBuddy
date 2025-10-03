@@ -15,8 +15,9 @@ class User(Base):
     password_hash = Column(String(255), nullable=False)
     created_at = Column(DateTime, default=datetime.utcnow)
     
-    # Relationship to events
+    # Relationship to events and custom elements
     events = relationship("Event", back_populates="user", cascade="all, delete-orphan")
+    custom_elements = relationship("UserElement", back_populates="user", cascade="all, delete-orphan")
 
 
 class Event(Base):
@@ -52,3 +53,16 @@ class Layout(Base):
     
     # Relationship
     event = relationship("Event", back_populates="layouts")
+
+
+class UserElement(Base):
+    __tablename__ = "user_elements"
+    
+    element_id = Column(Integer, primary_key=True, index=True)
+    user_id = Column(Integer, ForeignKey("users.user_id"), nullable=False)
+    name = Column(String(200), nullable=False)
+    element_data = Column(JSON, nullable=False)  # Stores the element configuration (type, properties, etc.)
+    thumbnail = Column(Text)  # Optional base64 encoded thumbnail for preview
+    
+    # Relationship
+    user = relationship("User", back_populates="custom_elements")

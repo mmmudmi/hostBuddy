@@ -4,6 +4,7 @@ import { useDispatch, useSelector } from 'react-redux';
 import { Stage, Layer, Rect, Circle, Text, Transformer, Ellipse, Line, RegularPolygon, Star, Arc, Group, Path } from 'react-konva';
 import { fetchEventById } from '../store/eventSlice';
 import layoutAPI from '../utils/api/layoutAPI';
+import userElementsAPI from '../utils/api/userElementsAPI';
 import jsPDF from 'jspdf';
 import LoadingSpinner from '../components/LoadingSpinner';
 
@@ -53,6 +54,15 @@ const LayoutDesigner = () => {
   const GRID_SIZE_Y = 15; // Vertical grid spacing
   const SNAP_THRESHOLD = 10; // Distance threshold for snapping
 
+  // Custom elements state
+  const [customElements, setCustomElements] = useState([]);
+  const [isLoadingCustomElements, setIsLoadingCustomElements] = useState(false);
+  const [showCustomElementsPanel, setShowCustomElementsPanel] = useState(false);
+  const [customElementsFilter, setCustomElementsFilter] = useState({ search: '' });
+  const [showSaveElementDialog, setShowSaveElementDialog] = useState(false);
+
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
   // Available color options
   const colorOptions = [
     '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#fbbf24', '#f97316',
@@ -76,6 +86,7 @@ const LayoutDesigner = () => {
     
     // Special Shapes
     { type: 'star', label: 'Star', icon: '★', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    { type: 'diamond', label: 'Diamond', icon: '♦', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
     
     // Lines and Dividers
@@ -98,6 +109,137 @@ const LayoutDesigner = () => {
       setSavedLayouts(eventLayouts);
     }
   }, [id]);
+
+  // Load custom elements for the current user
+  const loadCustomElements = useCallback(async () => {
+    try {
+      setIsLoadingCustomElements(true);
+      console.log('Loading custom elements with filter:', customElementsFilter);
+      const result = await userElementsAPI.getUserElements(customElementsFilter);
+      console.log('Custom elements API result:', result);
+      setCustomElements(result.elements);
+    } catch (error) {
+      console.warn('Failed to load custom elements:', error);
+      // Fallback to localStorage for custom elements
+      const saved = JSON.parse(localStorage.getItem('customElements') || '[]');
+      console.log('Using fallback custom elements from localStorage:', saved);
+      setCustomElements(saved);
+    } finally {
+      setIsLoadingCustomElements(false);
+    }
+  }, [customElementsFilter]);
+
+  // Add custom element from selected elements
+  const addCustomElementFromSelection = useCallback(async (name, description) => {
+    // Get elements to save - could be multiple selection or single grouped element
+    const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+    
+    if (elementsToSave.length === 0) return false;
+
+    const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
+    
+    // Check if we have a single grouped/merged element
+    const isSingleGrouped = elementsToSave.length === 1 && 
+                           selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
+    
+    if (elementsToSave.length === 1 && !isSingleGrouped) {
+      // Don't allow saving single non-grouped elements
+      alert('Cannot save single element as custom element.\n\nTo create custom elements:\n• Select multiple elements, OR\n• Select a grouped/merged object');
+      return false;
+    }
+
+    // Don't generate canvas thumbnail - we'll use actual Konva elements
+    const thumbnail = null;
+    console.log('Using live Konva preview instead of canvas thumbnail for', selectedElements.length, 'elements');
+
+    const elementData = {
+      name,
+      description,
+      element_data: {
+        type: 'group',
+        elements: selectedElements,
+        element_count: selectedElements.length,
+        isFromGrouped: isSingleGrouped,
+        originalType: isSingleGrouped ? selectedElements[0].type : 'multi-selection'
+      },
+      thumbnail,
+
+      is_public: false
+    };
+
+    try {
+      const newElement = await userElementsAPI.createElementFromSelection(elementData);
+      await loadCustomElements(); // Reload the list
+      return true;
+    } catch (error) {
+      console.error('Failed to save custom element:', error);
+      // Fallback to localStorage
+      const saved = JSON.parse(localStorage.getItem('customElements') || '[]');
+      const newElement = {
+        ...elementData,
+        element_id: Date.now(),
+        user_id: 1,
+        usage_count: 0,
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+      saved.push(newElement);
+      localStorage.setItem('customElements', JSON.stringify(saved));
+      setCustomElements(saved);
+      return true;
+    }
+  }, [selectedIds, selectedId, layoutElements, loadCustomElements]);
+
+  // Add custom element to layout
+  const addCustomElementToLayout = useCallback(async (customElement) => {
+    if (!customElement.element_data) return;
+
+    try {
+      // Increment usage count
+      await userElementsAPI.incrementElementUsage(customElement.element_id);
+    } catch (error) {
+      console.warn('Failed to increment usage count:', error);
+    }
+
+    if (customElement.element_data.type === 'group') {
+      // Add all elements from the group
+      const elements = customElement.element_data.elements || [];
+      const newElements = elements.map(el => ({
+        ...el,
+        id: `${Date.now()}-${Math.random()}`,
+        x: el.x + 50, // Offset to avoid overlap
+        y: el.y + 50
+      }));
+      setLayoutElements(prev => [...prev, ...newElements]);
+      setHasUnsavedChanges(true);
+    } else {
+      // Add single element
+      const elementData = customElement.element_data;
+      const newElement = {
+        id: `${Date.now()}-${Math.random()}`,
+        ...elementData,
+        x: 100,
+        y: 100
+      };
+      setLayoutElements(prev => [...prev, newElement]);
+      setHasUnsavedChanges(true);
+    }
+  }, []);
+
+  // Delete custom element
+  const deleteCustomElement = useCallback(async (elementId) => {
+    try {
+      await userElementsAPI.deleteUserElement(elementId);
+      await loadCustomElements(); // Reload the list
+    } catch (error) {
+      console.error('Failed to delete custom element:', error);
+      // Fallback to localStorage
+      const saved = JSON.parse(localStorage.getItem('customElements') || '[]');
+      const filtered = saved.filter(el => el.element_id !== elementId);
+      localStorage.setItem('customElements', JSON.stringify(filtered));
+      setCustomElements(filtered);
+    }
+  }, [loadCustomElements]);
 
   // Add CSS animations to document head
   useEffect(() => {
@@ -140,6 +282,10 @@ const LayoutDesigner = () => {
       }
     }
   }, [dispatch, id, navigate, loadLayouts]);
+
+  // Load custom elements
+  useEffect(() => {
+  }, [loadCustomElements]);
 
   const addElement = (elementType) => {
     // Get optimal position using auto-alignment
@@ -308,7 +454,8 @@ const LayoutDesigner = () => {
       case 'triangle':
       case 'pentagon':
       case 'hexagon':
-      case 'octagon': {
+      case 'octagon':
+      case 'diamond': {
         // Regular polygons: x,y is the CENTER, inscribed in circle with radius=width/2
         const radius = width / 2;
         return {
@@ -1020,12 +1167,19 @@ const LayoutDesigner = () => {
       color: 'transparent',
       label: 'Group',
       rotation: 0,
-      children: elementsToGroup.map(element => ({
-        ...element,
-        // Convert to relative coordinates within the group
-        x: element.x - minX,
-        y: element.y - minY,
-      })),
+      children: elementsToGroup.map(element => {
+        // Calculate proper relative position based on element's visual bounds
+        const bounds = getElementVisualBounds(element);
+        // For centered elements, calculate offset from their visual center to group origin
+        const relativeX = element.x - minX;
+        const relativeY = element.y - minY;
+        
+        return {
+          ...element,
+          x: relativeX,
+          y: relativeY,
+        };
+      }),
     };
 
     // Remove individual elements and add group
@@ -1057,7 +1211,6 @@ const LayoutDesigner = () => {
     console.log('Group children before ungrouping:', groupElement.children);
 
     // Convert children back to absolute coordinates
-    // Children already have their scaled dimensions from the transform handler
     const ungroupedElements = groupElement.children.map(child => ({
       ...child,
       id: `${child.id}_${Date.now()}`, // Generate new ID to avoid conflicts
@@ -1234,9 +1387,9 @@ const LayoutDesigner = () => {
 
     const mergedId = `merged_${Date.now()}`;
     
-    // Combine text from all elements
+    // Combine text only from text elements
     const combinedText = elementsToMerge
-      .filter(el => el.text && el.text.trim())
+      .filter(el => el.type === 'text' && el.text && el.text.trim())
       .map(el => el.text.trim())
       .join(' ');
 
@@ -1270,6 +1423,9 @@ const LayoutDesigner = () => {
         // Convert to relative coordinates within the merged container
         x: element.x - minX,
         y: element.y - minY,
+        // Hide text from non-text elements when merged, but preserve original
+        originalText: element.text, // Store original text for restoration
+        text: element.type === 'text' ? element.text : null,
       })),
       // Mark as merged for special rendering
       isMerged: true,
@@ -1312,6 +1468,10 @@ const LayoutDesigner = () => {
       color: mergedElement.color !== 'transparent' ? mergedElement.color : child.color,
       borderWidth: mergedElement.borderWidth || child.borderWidth,
       borderColor: mergedElement.borderColor || child.borderColor,
+      // Restore original text for all elements
+      text: child.originalText || child.text,
+      // Remove the temporary originalText property
+      originalText: undefined,
     }));
 
     // Remove the merged element and restore the original elements
@@ -2106,6 +2266,20 @@ const LayoutDesigner = () => {
         />
       );
     }
+    else if (element.type === 'diamond') {
+      shape = (
+        <RegularPolygon
+          {...shapeProps}
+          sides={4}
+          radius={element.width / 2}
+          rotation={45}
+          width={undefined}
+          height={undefined}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
+        />
+      );
+    }
     else if (element.type === 'star') {
       shape = (
         <Star
@@ -2166,88 +2340,14 @@ const LayoutDesigner = () => {
       );
     }
     else if (element.type === 'group') {
-      // Special drag handlers for groups
-      const handleGroupDragMove = (e) => {
-        // Show snap guides for group movement if snap-to-grid is enabled
-        if (snapToGrid) {
-          const currentX = e.target.x();
-          const currentY = e.target.y();
-          const nearestGridPos = findNearestGridPosition(currentX, currentY);
-          
-          // Show guides if close enough to snap
-          if (shouldSnapToPosition(currentX, currentY, nearestGridPos.x, nearestGridPos.y)) {
-            setShowSnapGuides([
-              { x: nearestGridPos.x, y: 0, width: 1, height: 600 }, // Vertical guide
-              { x: 0, y: nearestGridPos.y, width: 800, height: 1 }   // Horizontal guide
-            ]);
-          } else {
-            setShowSnapGuides([]);
-          }
-        }
-      };
-
-      const handleGroupDragEnd = (e) => {
-        // Apply snap-to-grid for group movement
-        const snappedPosition = findNearestGridPosition(e.target.x(), e.target.y());
-        
-        // Update the group position to snapped position
-        updateElement(element.id, {
-          x: snappedPosition.x,
-          y: snappedPosition.y,
-        });
-        
-        // Clear snap guides after drag ends
-        setShowSnapGuides([]);
-      };
-
-      const groupProps = {
-        key: element.id,
-        id: element.id,
-        x: element.x,
-        y: element.y,
-        width: element.width,
-        height: element.height,
-        draggable: true,
-        onDragMove: handleGroupDragMove,
-        onDragEnd: handleGroupDragEnd,
-        onTransform: (e) => {
-          // Live update during group transform
-          const node = e.target;
-          const scaleX = node.scaleX();
-          const scaleY = node.scaleY();
-          
-          // Update group container size in real-time
-          node.width(element.width * scaleX);
-          node.height(element.height * scaleY);
-          node.scaleX(1);
-          node.scaleY(1);
-        },
-        onTransformEnd: handleTransformEnd, // Add transform handler for groups
-        onClick: (e) => handleSelect(element.id, e.evt),
-        onTap: (e) => handleSelect(element.id, e.evt),
-      };
-
-      // Render group as a container with its children
+      // Render grouped elements by showing their actual children
       shape = (
-        <Group {...groupProps}>
-          {/* Full area selection rectangle (invisible) */}
-          <Rect
-            width={element.width}
-            height={element.height}
-            fill="transparent"
-            listening={true} // This makes the entire area clickable
-          />
-          {/* Visual group border */}
-          <Rect
-            width={element.width}
-            height={element.height}
-            // fill="transparent"
-            // stroke="transparent"
-            strokeWidth={isSelected ? 2 : 1}
-            dash={[5, 5]}
-            listening={false} // Visual only, selection handled by the invisible rect above
-          />
-          {/* Render children within the group */}
+        <Group
+          {...shapeProps}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
+        >
+          {/* Render the actual child elements within the group */}
           {element.children && element.children.map(child => {
             const childProps = {
               key: child.id,
@@ -2261,7 +2361,7 @@ const LayoutDesigner = () => {
               listening: true, // Allow children to be interactive
               onClick: (e) => {
                 e.cancelBubble = true; // Prevent event from bubbling to group
-                handleSelect(element.id, e.evt); // Select the group but focus on child
+                handleSelect(element.id, e.evt); // Select the group
               },
               onDblClick: (e) => {
                 e.cancelBubble = true; // Prevent event from bubbling to group
@@ -2422,10 +2522,25 @@ const LayoutDesigner = () => {
               </React.Fragment>
             );
           })}
+          
+          {/* Optional: Add a subtle group border when selected */}
+          {isSelected && (
+            <Rect
+              x={0}
+              y={0}
+              width={element.width}
+              height={element.height}
+              fill="transparent"
+              stroke="#3b82f6"
+              strokeWidth={2}
+              dash={[5, 5]}
+              opacity={0.6}
+              listening={false}
+            />
+          )}
         </Group>
       );
-    }
-    else if (element.type === 'merged') {
+    } else if (element.type === 'merged') {
       // Special rendering for merged elements - shows all children as a single unit
       const handleMergedDragMove = (e) => {
         // Update the merged element position in real-time during dragging
@@ -3323,6 +3438,361 @@ const LayoutDesigner = () => {
             </div>
           </div>
 
+          {/* Custom Elements Section */}
+          <div style={styles.sidebarSection}>
+            <div style={styles.sectionHeader}>
+              <h3>My Elements</h3>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
+                {/* Action Buttons Row */}
+                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                  {/* Save button - works for single grouped/merged objects OR multiple selections */}
+                  <button
+                    onClick={() => {
+                      const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+                      console.log('Save button clicked!', { selectedIds, selectedId, elementsToSave });
+                      
+                      if (elementsToSave.length > 0) {
+                        // Check if we have a single grouped/merged element or multiple elements
+                        const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
+                        const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
+                        
+                        if (elementsToSave.length > 1 || hasGroupedElement) {
+                          setShowSaveElementDialog(true);
+                        } else {
+                          alert('To create a custom element:\n\n• Select multiple elements (Shift+Click), OR\n• Select a grouped/merged object, OR\n• Use the 🧪 Test button to auto-select');
+                        }
+                      } else {
+                        alert('Please select at least one element first!\n\nSteps:\n1. Add some shapes to canvas\n2. Click to select element(s)\n3. Save button will work');
+                      }
+                    }}
+                    style={{
+                      ...styles.saveElementButton,
+                      backgroundColor: (() => {
+                        const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+                        if (elementsToSave.length > 1) return '#10b981'; // Multiple elements - green
+                        if (elementsToSave.length === 1) {
+                          const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
+                          const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
+                          return hasGroupedElement ? '#10b981' : '#f59e0b'; // Grouped - green, single - orange
+                        }
+                        return '#94a3b8'; // No selection - gray
+                      })()
+                    }}
+                    title="Save selected elements as custom element"
+                  >
+                    💾 Save ({(() => {
+                      const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+                      if (elementsToSave.length > 1) return 'MULTI';
+                      if (elementsToSave.length === 1) {
+                        const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
+                        const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
+                        return hasGroupedElement ? 'GROUP' : 'SINGLE';
+                      }
+                      return 'NONE';
+                    })()})
+                  </button>
+                  <button
+                    onClick={() => setShowCustomElementsPanel(!showCustomElementsPanel)}
+                    style={{...styles.toggleButton, backgroundColor: showCustomElementsPanel ? '#4f46e5' : '#6b7280'}}
+                    title="Toggle custom elements panel"
+                  >
+                    {showCustomElementsPanel ? '↑' : '↓'}
+                  </button>
+                </div>
+              </div>
+            </div>
+            
+            {showCustomElementsPanel && (
+              <div>
+                {/* Search and Filter */}
+                <div style={styles.filterContainer}>
+                  <input
+                    type="text"
+                    placeholder="Search elements..."
+                    value={customElementsFilter.search}
+                    onChange={(e) => setCustomElementsFilter(prev => ({...prev, search: e.target.value}))}
+                    style={styles.searchInput}
+                  />
+
+                </div>
+
+                {/* Custom Elements Grid */}
+                {isLoadingCustomElements ? (
+                  <div style={styles.loadingContainer}>Loading...</div>
+                ) : customElements.length > 0 ? (
+                  <div style={styles.customElementGrid}>
+                    {customElements.map((element) => {
+                      console.log('Rendering custom element item:', element.name, 'ID:', element.element_id);
+                      return (
+                        <div
+                          key={element.element_id}
+                          style={styles.customElementItem}
+                          onClick={() => addCustomElementToLayout(element)}
+                          title={`${element.name}${element.description ? ` - ${element.description}` : ''}`}
+                        >
+                        {element.thumbnail ? (
+                          <img 
+                            src={element.thumbnail} 
+                            alt={element.name}
+                            style={styles.elementThumbnail}
+                            onError={(e) => {
+                              // If thumbnail fails to load, show placeholder
+                              e.target.style.display = 'none';
+                              e.target.nextSibling.style.display = 'flex';
+                            }}
+                          />
+                        ) : null}
+                        {/* Mini Konva preview of the actual elements */}
+                        <div 
+                          style={{
+                            width: '60px',
+                            height: '60px',
+                            display: element.thumbnail ? 'none' : 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            overflow: 'hidden',
+                            border: '1px solid #e5e7eb',
+                            borderRadius: '4px',
+                            backgroundColor: '#ffffff',
+                            position: 'relative'
+                          }}
+                        >
+                          <Stage 
+                            width={60} 
+                            height={60}
+                            style={{ 
+                              pointerEvents: 'none',
+                              display: 'block'
+                            }}
+                          >
+                            <Layer>
+                              {element.element_data && element.element_data.elements && element.element_data.elements.length > 0 ? (
+                                (() => {
+                                  const elements = element.element_data.elements;
+                                  console.log('🖼️ Rendering thumbnail for:', element.name, 'Elements:', elements.length);
+                                  
+                                  // Handle merged elements specially
+                                  if (elements.length === 1 && elements[0].type === 'merged' && elements[0].children) {
+                                    console.log('📦 Merged element detected, using children');
+                                    const mergedChildren = elements[0].children;
+                                    
+                                    // Calculate bounds for merged children
+                                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                                    mergedChildren.forEach(child => {
+                                      const x = child.x || 0;
+                                      const y = child.y || 0;
+                                      const w = child.width || 20;
+                                      const h = child.height || 20;
+                                      
+                                      // Calculate proper bounds based on shape type
+                                      if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
+                                          child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
+                                          child.type === 'octagon' || child.type === 'diamond') {
+                                        // Centered shapes - x,y is the center point
+                                        const radius = Math.max(w, h) / 2;
+                                        minX = Math.min(minX, x - radius);
+                                        minY = Math.min(minY, y - radius);
+                                        maxX = Math.max(maxX, x + radius);
+                                        maxY = Math.max(maxY, y + radius);
+                                      } else {
+                                        // Rectangle-based shapes - x,y is top-left corner
+                                        minX = Math.min(minX, x);
+                                        minY = Math.min(minY, y);
+                                        maxX = Math.max(maxX, x + w);
+                                        maxY = Math.max(maxY, y + h);
+                                      }
+                                    });
+                                    
+                                    const boundingWidth = Math.max(maxX - minX, 20);
+                                    const boundingHeight = Math.max(maxY - minY, 20);
+                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
+                                    const offsetX = (60 - boundingWidth * scale) / 2;
+                                    const offsetY = (60 - boundingHeight * scale) / 2;
+                                    
+                                    console.log('📐 Merged bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
+                                    
+                                    return mergedChildren.map((child, idx) => {
+                                      // For centered shapes, adjust positioning
+                                      let scaledX, scaledY;
+                                      if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
+                                          child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
+                                          child.type === 'octagon' || child.type === 'diamond') {
+                                        // Centered shapes - keep them centered
+                                        scaledX = (child.x - minX) * scale + offsetX;
+                                        scaledY = (child.y - minY) * scale + offsetY;
+                                      } else {
+                                        // Corner-based shapes
+                                        scaledX = (child.x - minX) * scale + offsetX;
+                                        scaledY = (child.y - minY) * scale + offsetY;
+                                      }
+                                      
+                                      const scaledWidth = (child.width || 20) * scale;
+                                      const scaledHeight = (child.height || 20) * scale;
+                                      
+                                      const props = {
+                                        key: `merged-thumb-${idx}`,
+                                        x: scaledX,
+                                        y: scaledY,
+                                        fill: child.color || '#9ca3af',
+                                        stroke: child.borderColor || 'transparent',
+                                        strokeWidth: Math.max((child.borderWidth || 0) * scale, 0),
+                                        listening: false
+                                      };
+                                      
+                                      console.log(`🎨 Child ${idx} (${child.type}):`, { x: scaledX, y: scaledY, w: scaledWidth, h: scaledHeight });
+                                      
+                                      // Render child shapes - handle ALL shape types
+                                      if (child.type === 'arc') {
+                                        return <Arc {...props} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} angle={180} />;
+                                      } else if (child.type === 'star') {
+                                        return <Star {...props} numPoints={5} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} />;
+                                      } else if (child.type === 'round') {
+                                        return <Circle {...props} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'ellipse') {
+                                        return <Ellipse {...props} radiusX={scaledWidth / 2} radiusY={scaledHeight / 2} />;
+                                      } else if (child.type === 'triangle') {
+                                        return <RegularPolygon {...props} sides={3} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'pentagon') {
+                                        return <RegularPolygon {...props} sides={5} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'hexagon') {
+                                        return <RegularPolygon {...props} sides={6} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'octagon') {
+                                        return <RegularPolygon {...props} sides={8} radius={scaledWidth / 2} />;
+                                      } else if (child.type === 'diamond') {
+                                        return <RegularPolygon {...props} sides={4} radius={scaledWidth / 2} rotation={45} />;
+                                      } else if (child.type === 'line') {
+                                        return <Line {...props} points={[0, 0, scaledWidth, 0]} stroke={child.color || '#000000'} strokeWidth={Math.max((child.height || 2) * scale, 1)} fill={undefined} />;
+                                      } else if (child.type === 'text') {
+                                        return <Text {...props} text={(child.text || 'Text').substring(0, 8)} fontSize={Math.max((child.fontSize || 16) * scale, 8)} width={scaledWidth} height={scaledHeight} />;
+                                      } else {
+                                        // Default rectangle for square, rectangle, and unknown types
+                                        return <Rect {...props} width={scaledWidth} height={scaledHeight} />;
+                                      }
+                                    });
+                                  } else {
+                                    // Regular elements (non-merged)
+                                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                                    elements.forEach(el => {
+                                      const x = el.x || 0;
+                                      const y = el.y || 0;
+                                      const w = el.width || 20;
+                                      const h = el.height || 20;
+                                      
+                                      // Calculate proper bounds based on element type
+                                      if (el.type === 'round' || el.type === 'star' || el.type === 'arc' || el.type === 'triangle' || el.type === 'pentagon' || el.type === 'hexagon' || el.type === 'octagon') {
+                                        // Centered shapes
+                                        const radius = Math.max(w, h) / 2;
+                                        minX = Math.min(minX, x - radius);
+                                        minY = Math.min(minY, y - radius);
+                                        maxX = Math.max(maxX, x + radius);
+                                        maxY = Math.max(maxY, y + radius);
+                                      } else {
+                                        // Rectangle-based shapes
+                                        minX = Math.min(minX, x);
+                                        minY = Math.min(minY, y);
+                                        maxX = Math.max(maxX, x + w);
+                                        maxY = Math.max(maxY, y + h);
+                                      }
+                                    });
+                                    
+                                    const boundingWidth = Math.max(maxX - minX, 20);
+                                    const boundingHeight = Math.max(maxY - minY, 20);
+                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
+                                    const offsetX = (60 - boundingWidth * scale) / 2;
+                                    const offsetY = (60 - boundingHeight * scale) / 2;
+                                    
+                                    console.log('📐 Regular element bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
+                                    
+                                    return elements.map((el, idx) => {
+                                      const scaledX = (el.x - minX) * scale + offsetX;
+                                      const scaledY = (el.y - minY) * scale + offsetY;
+                                      const scaledWidth = (el.width || 20) * scale;
+                                      const scaledHeight = (el.height || 20) * scale;
+                                      
+                                      const props = {
+                                        key: `thumb-${idx}`,
+                                        x: scaledX,
+                                        y: scaledY,
+                                        fill: el.color || '#9ca3af',
+                                        stroke: el.borderColor || 'transparent',
+                                        strokeWidth: Math.max((el.borderWidth || 0) * scale, 0),
+                                        listening: false
+                                      };
+                                      
+                                      console.log(`🎨 Element ${idx} (${el.type}):`, { x: scaledX, y: scaledY, w: scaledWidth, h: scaledHeight });
+                                      
+                                      // Render all shape types properly
+                                      if (el.type === 'round') {
+                                        return <Circle {...props} radius={scaledWidth / 2} />;
+                                      } else if (el.type === 'ellipse') {
+                                        return <Ellipse {...props} radiusX={scaledWidth / 2} radiusY={scaledHeight / 2} />;
+                                      } else if (el.type === 'triangle') {
+                                        return <RegularPolygon {...props} sides={3} radius={scaledWidth / 2} />;
+                                      } else if (el.type === 'pentagon') {
+                                        return <RegularPolygon {...props} sides={5} radius={scaledWidth / 2} />;
+                                      } else if (el.type === 'hexagon') {
+                                        return <RegularPolygon {...props} sides={6} radius={scaledWidth / 2} />;
+                                      } else if (el.type === 'octagon') {
+                                        return <RegularPolygon {...props} sides={8} radius={scaledWidth / 2} />;
+                                      } else if (el.type === 'star') {
+                                        return <Star {...props} numPoints={5} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} />;
+                                      } else if (el.type === 'arc') {
+                                        return <Arc {...props} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} angle={180} />;
+                                      } else if (el.type === 'line') {
+                                        return <Line {...props} points={[0, 0, scaledWidth, 0]} stroke={el.color || '#000000'} strokeWidth={Math.max((el.height || 2) * scale, 1)} fill={undefined} />;
+                                      } else if (el.type === 'text') {
+                                        return <Text {...props} text={(el.text || 'Text').substring(0, 8)} fontSize={Math.max((el.fontSize || 16) * scale, 8)} width={scaledWidth} height={scaledHeight} />;
+                                      } else {
+                                        // Default rectangle for square, rectangle, and unknown types
+                                        return <Rect {...props} width={scaledWidth} height={scaledHeight} />;
+                                      }
+                                    });
+                                  }
+                                })()
+                              ) : (
+                                // Fallback placeholder
+                                <Text x={30} y={30} text="?" fontSize={16} fill="#9ca3af" align="center" />
+                              )}
+                            </Layer>
+                          </Stage>
+                        </div>
+                        <div 
+                          style={{
+                            ...styles.elementPlaceholder,
+                            display: (element.thumbnail || (element.element_data && element.element_data.elements)) ? 'none' : 'flex'
+                          }}
+                        >
+                          {element.element_data && element.element_data.type === 'group' ? '📦' : '🔷'}
+                        </div>
+                        <div style={styles.elementInfo}>
+                          <span style={styles.elementName}>{element.name}</span>
+                        </div>
+                        <button
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            setShowDeleteConfirm(element.element_id);
+                          }}
+                          style={{
+                            ...styles.deleteElementButton,
+                            opacity: 1 // Always show for now, CSS hover not working in React inline styles
+                          }}
+                          title="Delete custom element"
+                        >
+                          ×
+                        </button>
+                      </div>
+                    );
+                    })}
+                  </div>
+                ) : (
+                  <div style={styles.emptyState}>
+                    No custom elements yet. Select multiple elements and click the save button to create your first custom element!
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
           {/* Saved Layouts Section */}
           <div style={styles.sidebarSection}>
             <div style={styles.sectionHeader}>
@@ -3846,6 +4316,90 @@ const LayoutDesigner = () => {
           </div>
         </div>
       )}
+
+      {/* Save Element Dialog */}
+      {showSaveElementDialog && (
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
+            <h3>Save Custom Element</h3>
+            <form onSubmit={async (e) => {
+              e.preventDefault();
+              const formData = new FormData(e.target);
+              const name = formData.get('name');
+              const description = formData.get('description');
+              const success = await addCustomElementFromSelection(name, description);
+              if (success) {
+                setShowSaveElementDialog(false);
+                setSelectedIds([]);
+                setSelectedId(null);
+              }
+            }}>
+              <div style={styles.formGroup}>
+                <label>Name *</label>
+                <input 
+                  type="text" 
+                  name="name" 
+                  required 
+                  style={styles.input}
+                  placeholder="Enter element name..."
+                />
+              </div>
+              <div style={styles.formGroup}>
+                <label>Description</label>
+                <textarea 
+                  name="description" 
+                  style={styles.textarea}
+                  placeholder="Optional description..."
+                  rows="3"
+                />
+              </div>
+
+              <div style={styles.formActions}>
+                <button 
+                  type="button" 
+                  onClick={() => setShowSaveElementDialog(false)}
+                  style={styles.cancelButton}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="submit" 
+                  style={styles.saveButton}
+                >
+                  Save Element
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* Delete Confirmation Dialog */}
+      {showDeleteConfirm && (
+        <div style={styles.modal}>
+          <div style={styles.modalContent}>
+            <h3>Delete Custom Element</h3>
+            <p>Are you sure you want to delete this custom element? This action cannot be undone.</p>
+            <div style={styles.formActions}>
+              <button 
+                onClick={() => setShowDeleteConfirm(null)}
+                style={styles.cancelButton}
+              >
+                Cancel
+              </button>
+              <button 
+                onClick={async () => {
+                  await deleteCustomElement(showDeleteConfirm);
+                  setShowDeleteConfirm(null);
+                }}
+                style={styles.deleteButton}
+              >
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };
@@ -4303,6 +4857,273 @@ const styles = {
     backgroundColor: '#4b5563',
     transform: 'scale(1.02)',
     boxShadow: '0 4px 8px rgba(107, 114, 128, 0.3)',
+  },
+  
+  // Custom Elements Styles
+  saveElementButton: {
+    backgroundColor: '#10b981',
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '6px 12px',
+    fontSize: '14px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    fontWeight: '600',
+  },
+  selectionInfo: {
+    fontSize: '12px',
+    color: '#4f46e5',
+    fontWeight: '600',
+    padding: '6px 8px',
+    backgroundColor: '#ede9fe',
+    borderRadius: '4px',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  helperText: {
+    fontSize: '10px',
+    color: '#9ca3af',
+    fontStyle: 'italic',
+    display: 'flex',
+    alignItems: 'center',
+    maxWidth: '150px',
+    lineHeight: '1.2',
+  },
+  instructionBox: {
+    backgroundColor: '#f0f9ff',
+    border: '1px solid #0ea5e9',
+    borderRadius: '4px',
+    padding: '8px',
+    marginBottom: '12px',
+    fontSize: '11px',
+    lineHeight: '1.4',
+    color: '#0369a1',
+  },
+  selectionStatus: {
+    padding: '4px 8px',
+    borderRadius: '4px',
+    fontSize: '12px',
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  noSelection: {
+    color: '#9ca3af',
+    backgroundColor: '#f9fafb',
+  },
+  singleSelection: {
+    color: '#0ea5e9',
+    backgroundColor: '#f0f9ff',
+  },
+  multiSelection: {
+    color: '#10b981',
+    backgroundColor: '#f0fdf4',
+  },
+  debugInfo: {
+    backgroundColor: '#fef3c7',
+    border: '1px solid #f59e0b',
+    borderRadius: '4px',
+    padding: '4px 6px',
+    fontSize: '10px',
+    fontFamily: 'monospace',
+    color: '#92400e',
+    wordBreak: 'break-all',
+  },
+  toggleButton: {
+    color: 'white',
+    border: 'none',
+    borderRadius: '4px',
+    padding: '6px 8px',
+    fontSize: '12px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+  },
+  filterContainer: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    marginBottom: '12px',
+  },
+  searchInput: {
+    padding: '6px 8px',
+    border: '1px solid #d1d5db',
+    borderRadius: '4px',
+    fontSize: '12px',
+  },
+
+  customElementGrid: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '8px',
+    maxHeight: '300px',
+    overflowY: 'auto',
+  },
+  customElementItem: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: '8px',
+    padding: '8px',
+    border: '1px solid #e5e7eb',
+    borderRadius: '6px',
+    cursor: 'pointer',
+    transition: 'all 0.2s ease',
+    backgroundColor: 'white',
+    position: 'relative',
+    ':hover': {
+      backgroundColor: '#f9fafb',
+      borderColor: '#d1d5db',
+    },
+    ':hover .delete-button': {
+      opacity: 1,
+    },
+  },
+  elementThumbnail: {
+    width: '40px',
+    height: '40px',
+    objectFit: 'cover',
+    borderRadius: '4px',
+    border: '1px solid #e5e7eb',
+  },
+  elementPlaceholder: {
+    width: '40px',
+    height: '40px',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#f3f4f6',
+    borderRadius: '4px',
+    border: '1px solid #e5e7eb',
+    fontSize: '20px',
+  },
+  elementInfo: {
+    flex: 1,
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  elementName: {
+    fontSize: '12px',
+    fontWeight: '600',
+    color: '#1f2937',
+  },
+  elementMeta: {
+    display: 'flex',
+    flexDirection: 'column',
+    gap: '2px',
+  },
+  elementCount: {
+    fontSize: '10px',
+    color: '#6b7280',
+  },
+
+
+  deleteElementButton: {
+    position: 'absolute',
+    top: '4px',
+    right: '4px',
+    backgroundColor: '#ef4444',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '16px',
+    height: '16px',
+    fontSize: '10px',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    opacity: 0,
+    transition: 'opacity 0.2s ease',
+  },
+  loadingContainer: {
+    padding: '20px',
+    textAlign: 'center',
+    color: '#6b7280',
+    fontSize: '12px',
+  },
+  emptyState: {
+    padding: '20px',
+    textAlign: 'center',
+    color: '#6b7280',
+    fontSize: '12px',
+    lineHeight: '1.4',
+  },
+  
+  // Modal and Dialog Styles
+  modal: {
+    position: 'fixed',
+    top: 0,
+    left: 0,
+    right: 0,
+    bottom: 0,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modalContent: {
+    backgroundColor: 'white',
+    borderRadius: '8px',
+    padding: '24px',
+    minWidth: '400px',
+    maxWidth: '500px',
+    boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.1)',
+  },
+  formGroup: {
+    marginBottom: '16px',
+  },
+  input: {
+    width: '100%',
+    padding: '8px 12px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '14px',
+    boxSizing: 'border-box',
+    marginTop: '4px',
+  },
+  textarea: {
+    width: '100%',
+    padding: '8px 12px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    fontSize: '14px',
+    boxSizing: 'border-box',
+    marginTop: '4px',
+    resize: 'vertical',
+  },
+  formActions: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: '8px',
+    marginTop: '20px',
+  },
+  cancelButton: {
+    padding: '8px 16px',
+    border: '1px solid #d1d5db',
+    borderRadius: '6px',
+    backgroundColor: 'white',
+    color: '#374151',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  saveButton: {
+    padding: '8px 16px',
+    border: 'none',
+    borderRadius: '6px',
+    backgroundColor: '#3b82f6',
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '14px',
+  },
+  deleteButton: {
+    padding: '8px 16px',
+    border: 'none',
+    borderRadius: '6px',
+    backgroundColor: '#ef4444',
+    color: 'white',
+    cursor: 'pointer',
+    fontSize: '14px',
   },
 };
 
