@@ -79,7 +79,7 @@ const LayoutDesigner = () => {
     { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
     
     // Lines and Dividers
-    { type: 'line', label: 'Line', icon: '━', defaultWidth: 100, defaultHeight: 2, color: '#9ca3af' },
+    { type: 'rectangle', label: 'Line', icon: '━', defaultWidth: 100, defaultHeight: 2, color: '#9ca3af' },
     
     // Text and Labels
     { type: 'text', label: 'Text', icon: '✎', defaultWidth: 100, defaultHeight: 30, color: '#9ca3af' },
@@ -159,7 +159,7 @@ const LayoutDesigner = () => {
     
     // Add special properties for text elements
     if (elementType.type === 'text') {
-      newElement.text = 'Sample Text';
+      newElement.text = 'Text';
     }
     
     setLayoutElements(prev => [...prev, newElement]);
@@ -591,6 +591,17 @@ const LayoutDesigner = () => {
                   color: newColor
                 }))
               };
+            } else if (element.type === 'group' && element.children) {
+              // For group objects, update all children colors (preserve border properties)
+              return {
+                ...element,
+                color: newColor,
+                children: element.children.map(child => ({
+                  ...child,
+                  color: newColor
+                  // All other properties including borderColor and borderWidth are preserved
+                }))
+              };
             } else {
               return { ...element, color: newColor };
             }
@@ -599,20 +610,38 @@ const LayoutDesigner = () => {
         })
       );
     } else if (selectedId) {
-      // Change color of single selected element
-      const selectedElement = layoutElements.find(el => el.id === selectedId);
-      if (selectedElement && selectedElement.type === 'merged' && selectedElement.children) {
-        // For merged objects, update both the element color and all children colors
-        updateElement(selectedId, {
-          color: newColor,
-          children: selectedElement.children.map(child => ({
-            ...child,
-            color: newColor
-          }))
-        });
-      } else {
-        updateElement(selectedId, { color: newColor });
-      }
+      // Change color of single selected element - use direct state update for groups too
+      setLayoutElements(prev => 
+        prev.map(element => {
+          if (element.id === selectedId) {
+            if (element.type === 'merged' && element.children) {
+              // For merged objects, update both the element color and all children colors
+              return {
+                ...element,
+                color: newColor,
+                children: element.children.map(child => ({
+                  ...child,
+                  color: newColor
+                }))
+              };
+            } else if (element.type === 'group' && element.children) {
+              // For group objects, update all children colors (preserve border properties)
+              return {
+                ...element,
+                color: newColor,
+                children: element.children.map(child => ({
+                  ...child,
+                  color: newColor
+                  // All other properties including borderColor and borderWidth are preserved
+                }))
+              };
+            } else {
+              return { ...element, color: newColor };
+            }
+          }
+          return element;
+        })
+      );
     }
     setShowColorPicker(false);
     setHasUnsavedChanges(true);
@@ -625,11 +654,25 @@ const LayoutDesigner = () => {
       setLayoutElements(prev => 
         prev.map(element => {
           if (selectedIds.includes(element.id)) {
-            return {
-              ...element,
-              borderWidth: 0,
-              borderColor: 'transparent'
-            };
+            if (element.type === 'group' && element.children) {
+              // For group objects, clear borders for all children
+              return {
+                ...element,
+                borderWidth: 0,
+                borderColor: 'transparent',
+                children: element.children.map(child => ({
+                  ...child,
+                  borderWidth: 0,
+                  borderColor: 'transparent'
+                }))
+              };
+            } else {
+              return {
+                ...element,
+                borderWidth: 0,
+                borderColor: 'transparent'
+              };
+            }
           }
           return element;
         })
@@ -638,10 +681,23 @@ const LayoutDesigner = () => {
       // Clear border for single selected element
       const element = layoutElements.find(el => el.id === selectedId);
       if (element) {
-        updateElement(selectedId, { 
-          borderWidth: 0,
-          borderColor: 'transparent'
-        });
+        if (element.type === 'group' && element.children) {
+          // For group objects, clear borders for all children
+          updateElement(selectedId, {
+            borderWidth: 0,
+            borderColor: 'transparent',
+            children: element.children.map(child => ({
+              ...child,
+              borderWidth: 0,
+              borderColor: 'transparent'
+            }))
+          });
+        } else {
+          updateElement(selectedId, { 
+            borderWidth: 0,
+            borderColor: 'transparent'
+          });
+        }
       }
     }
     
@@ -657,13 +713,28 @@ const LayoutDesigner = () => {
       setLayoutElements(prev => 
         prev.map(element => {
           if (selectedIds.includes(element.id)) {
-            return { 
-              ...element, 
-              borderWidth: width,
-              // If setting width to 0, clear border color to avoid black remnants
-              // If setting width > 0, ensure there's a visible border color
-              borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
-            };
+            if (element.type === 'group' && element.children) {
+              // For group objects, update border width for all children (preserve main colors)
+              return {
+                ...element,
+                borderWidth: width,
+                borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6'),
+                children: element.children.map(child => ({
+                  ...child,
+                  borderWidth: width,
+                  borderColor: width === 0 ? undefined : (child.borderColor || '#3b82f6')
+                  // Note: child.color (main color) is preserved via spread operator
+                }))
+              };
+            } else {
+              return { 
+                ...element, 
+                borderWidth: width,
+                // If setting width to 0, clear border color to avoid black remnants
+                // If setting width > 0, ensure there's a visible border color
+                borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
+              };
+            }
           }
           return element;
         })
@@ -671,12 +742,25 @@ const LayoutDesigner = () => {
     } else if (selectedId) {
       const element = layoutElements.find(el => el.id === selectedId);
       if (element) {
-        updateElement(selectedId, { 
-          borderWidth: width,
-          // If setting width to 0, clear border color to avoid black remnants
-          // If setting width > 0, ensure there's a visible border color
-          borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
-        });
+        if (element.type === 'group' && element.children) {
+          // For group objects, update border width for all children
+          updateElement(selectedId, {
+            borderWidth: width,
+            borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6'),
+            children: element.children.map(child => ({
+              ...child,
+              borderWidth: width,
+              borderColor: width === 0 ? undefined : (child.borderColor || '#3b82f6')
+            }))
+          });
+        } else {
+          updateElement(selectedId, { 
+            borderWidth: width,
+            // If setting width to 0, clear border color to avoid black remnants
+            // If setting width > 0, ensure there's a visible border color
+            borderColor: width === 0 ? undefined : (element.borderColor || '#3b82f6')
+          });
+        }
       }
     }
     setHasUnsavedChanges(true);
@@ -686,14 +770,49 @@ const LayoutDesigner = () => {
   const changeBorderColor = useCallback((color) => {
     if (isMultiSelect && selectedIds.length > 0) {
       setLayoutElements(prev => 
-        prev.map(element => 
-          selectedIds.includes(element.id) 
-            ? { ...element, borderColor: color }
-            : element
-        )
+        prev.map(element => {
+          if (selectedIds.includes(element.id)) {
+            if (element.type === 'group' && element.children) {
+              // For group objects, update only border colors of children (preserve other properties)
+              return {
+                ...element,
+                borderColor: color,
+                children: element.children.map(child => ({
+                  ...child,
+                  borderColor: color
+                  // Explicitly preserve the child's original color property
+                }))
+              };
+            } else {
+              return { ...element, borderColor: color };
+            }
+          }
+          return element;
+        })
       );
     } else if (selectedId) {
-      updateElement(selectedId, { borderColor: color });
+      // Change border color of single selected element - use direct state update for groups too
+      setLayoutElements(prev => 
+        prev.map(element => {
+          if (element.id === selectedId) {
+            if (element.type === 'group' && element.children) {
+              // For group objects, update only border colors of children (preserve other properties)
+              return {
+                ...element,
+                borderColor: color,
+                children: element.children.map(child => ({
+                  ...child,
+                  borderColor: color
+                  // Explicitly preserve the child's original color property
+                }))
+              };
+            } else {
+              return { ...element, borderColor: color };
+            }
+          }
+          return element;
+        })
+      );
     }
     setHasUnsavedChanges(true);
   }, [selectedId, selectedIds, isMultiSelect, updateElement]);
@@ -1170,6 +1289,49 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedIds, layoutElements, getElementVisualBounds]);
 
+  // Unmerge selected merged element back into its original components
+  const unmergeElements = useCallback(() => {
+    if (!selectedId) {
+      return;
+    }
+
+    const mergedElement = layoutElements.find(element => element.id === selectedId);
+    if (!mergedElement || mergedElement.type !== 'merged') {
+      return;
+    }
+
+    console.log('Unmerging element:', mergedElement);
+
+    // Convert child elements back to absolute coordinates and preserve merged element's styling
+    const restoredElements = mergedElement.children.map(child => ({
+      ...child,
+      // Convert back to absolute coordinates
+      x: child.x + mergedElement.x,
+      y: child.y + mergedElement.y,
+      // Preserve the merged element's color and border properties
+      color: mergedElement.color !== 'transparent' ? mergedElement.color : child.color,
+      borderWidth: mergedElement.borderWidth || child.borderWidth,
+      borderColor: mergedElement.borderColor || child.borderColor,
+    }));
+
+    // Remove the merged element and restore the original elements
+    setLayoutElements(prev => [
+      ...prev.filter(element => element.id !== selectedId),
+      ...restoredElements
+    ]);
+
+    // Select the first restored element
+    if (restoredElements.length > 0) {
+      setSelectedId(restoredElements[0].id);
+    } else {
+      setSelectedId(null);
+    }
+    setSelectedIds([]);
+    setIsMultiSelect(false);
+    setTempGroupBounds(null);
+    setHasUnsavedChanges(true);
+  }, [selectedId, layoutElements]);
+
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
     // Don't handle shortcuts when editing text
@@ -1204,10 +1366,14 @@ const LayoutDesigner = () => {
       }
     }
     
-    // Merge shortcut - Ctrl/Cmd + M
+    // Merge/Unmerge shortcuts - Ctrl/Cmd + M
     if (isCtrlOrCmd && event.key.toLowerCase() === 'm') {
-      if (selectedIds.length > 1) {
-        event.preventDefault();
+      event.preventDefault();
+      if (event.shiftKey) {
+        // Ctrl/Cmd + Shift + M = Unmerge
+        unmergeElements();
+      } else if (selectedIds.length > 1) {
+        // Ctrl/Cmd + M = Merge
         mergeElements();
       }
     }
@@ -1779,7 +1945,8 @@ const LayoutDesigner = () => {
       const scaleX = node.scaleX();
       const scaleY = node.scaleY();
       
-      console.log('Transform end called for element:', element.id, 'type:', element.type, 'scaleX:', scaleX, 'scaleY:', scaleY);
+      // Only proceed if there was actual scaling
+      if (scaleX === 1 && scaleY === 1) return;
       
       // Check if this is a group element
       if (element.type === 'group') {
@@ -1787,21 +1954,15 @@ const LayoutDesigner = () => {
         const newWidth = Math.max(5, node.width() * scaleX);
         const newHeight = Math.max(5, node.height() * scaleY);
         
-        // Calculate scale ratios
-        const widthRatio = scaleX;
-        const heightRatio = scaleY;
-        
-        console.log('Group scale ratios - widthRatio:', widthRatio, 'heightRatio:', heightRatio);
-        
         // Scale all children proportionally
         const scaledChildren = element.children.map(child => ({
           ...child,
-          x: child.x * widthRatio,
-          y: child.y * heightRatio,
-          width: child.width * widthRatio,
-          height: child.height * heightRatio,
+          x: child.x * scaleX,
+          y: child.y * scaleY,
+          width: child.width * scaleX,
+          height: child.height * scaleY,
           // Scale font size for text elements
-          fontSize: child.type === 'text' && child.fontSize ? child.fontSize * Math.min(widthRatio, heightRatio) : child.fontSize
+          fontSize: child.type === 'text' && child.fontSize ? child.fontSize * Math.min(scaleX, scaleY) : child.fontSize
         }));
       
         updateElement(element.id, {
@@ -1823,6 +1984,7 @@ const LayoutDesigner = () => {
         });
       }
       
+      // Reset scale after applying the changes
       node.scaleX(1);
       node.scaleY(1);
     };
@@ -1860,18 +2022,6 @@ const LayoutDesigner = () => {
       onDragStart: handleDragStart,
       onDragMove: handleDragMove,
       onDragEnd: handleDragEnd,
-      onTransform: (e) => {
-        // Live update during transform for immediate visual feedback
-        const node = e.target;
-        const scaleX = node.scaleX();
-        const scaleY = node.scaleY();
-        
-        // Update the element's visual size in real-time
-        node.width(element.width * scaleX);
-        node.height(element.height * scaleY);
-        node.scaleX(1);
-        node.scaleY(1);
-      },
       onTransformEnd: handleTransformEnd,
       onClick: (e) => handleSelect(element.id, e.evt),
       onTap: (e) => handleSelect(element.id, e.evt),
@@ -2017,15 +2167,37 @@ const LayoutDesigner = () => {
     }
     else if (element.type === 'group') {
       // Special drag handlers for groups
+      const handleGroupDragMove = (e) => {
+        // Show snap guides for group movement if snap-to-grid is enabled
+        if (snapToGrid) {
+          const currentX = e.target.x();
+          const currentY = e.target.y();
+          const nearestGridPos = findNearestGridPosition(currentX, currentY);
+          
+          // Show guides if close enough to snap
+          if (shouldSnapToPosition(currentX, currentY, nearestGridPos.x, nearestGridPos.y)) {
+            setShowSnapGuides([
+              { x: nearestGridPos.x, y: 0, width: 1, height: 600 }, // Vertical guide
+              { x: 0, y: nearestGridPos.y, width: 800, height: 1 }   // Horizontal guide
+            ]);
+          } else {
+            setShowSnapGuides([]);
+          }
+        }
+      };
+
       const handleGroupDragEnd = (e) => {
-        const deltaX = e.target.x() - element.x;
-        const deltaY = e.target.y() - element.y;
+        // Apply snap-to-grid for group movement
+        const snappedPosition = findNearestGridPosition(e.target.x(), e.target.y());
         
-        // Update the group position and all children relative positions remain the same
+        // Update the group position to snapped position
         updateElement(element.id, {
-          x: e.target.x(),
-          y: e.target.y(),
+          x: snappedPosition.x,
+          y: snappedPosition.y,
         });
+        
+        // Clear snap guides after drag ends
+        setShowSnapGuides([]);
       };
 
       const groupProps = {
@@ -2036,6 +2208,7 @@ const LayoutDesigner = () => {
         width: element.width,
         height: element.height,
         draggable: true,
+        onDragMove: handleGroupDragMove,
         onDragEnd: handleGroupDragEnd,
         onTransform: (e) => {
           // Live update during group transform
@@ -3060,6 +3233,15 @@ const LayoutDesigner = () => {
               Ungroup
             </button>
           )}
+          {selectedId && layoutElements.find(el => el.id === selectedId)?.type === 'merged' && (
+            <button 
+              onClick={unmergeElements}
+              className="btn btn-warning btn-small"
+              title="Unmerge selected merged element (Ctrl+Shift+M)"
+            >
+              Unmerge
+            </button>
+          )}
         </div>
       </div>
 
@@ -3272,30 +3454,59 @@ const LayoutDesigner = () => {
                         y: e.target.y()
                       }));
                       
+                      // Show snap guides for group movement if snap-to-grid is enabled
+                      if (snapToGrid) {
+                        const currentX = e.target.x();
+                        const currentY = e.target.y();
+                        const nearestGridPos = findNearestGridPosition(currentX, currentY);
+                        
+                        // Show guides if close enough to snap
+                        if (shouldSnapToPosition(currentX, currentY, nearestGridPos.x, nearestGridPos.y)) {
+                          setShowSnapGuides([
+                            { x: nearestGridPos.x, y: 0, width: 1, height: 600 }, // Vertical guide
+                            { x: 0, y: nearestGridPos.y, width: 800, height: 1 }   // Horizontal guide
+                          ]);
+                        } else {
+                          setShowSnapGuides([]);
+                        }
+                      }
+                      
                       // Keep the rect at its original position to avoid double movement
                       e.target.x(tempGroupBounds.x);
                       e.target.y(tempGroupBounds.y);
                     }}
                     onDragEnd={(e) => {
-                      // Handle temp group drag - move all selected elements
-                      const deltaX = e.target.x() - tempGroupBounds.x;
-                      const deltaY = e.target.y() - tempGroupBounds.y;
+                      // Handle temp group drag - move all selected elements with snap-to-grid
+                      const draggedX = e.target.x();
+                      const draggedY = e.target.y();
                       
-                      // Update all selected elements
+                      // Apply snap-to-grid for group movement
+                      const snappedPosition = findNearestGridPosition(draggedX, draggedY);
+                      const actualDeltaX = snappedPosition.x - tempGroupBounds.x;
+                      const actualDeltaY = snappedPosition.y - tempGroupBounds.y;
+                      
+                      // Update all selected elements with snapped positions
                       setLayoutElements(prev => 
                         prev.map(element => 
                           selectedIds.includes(element.id)
-                            ? { ...element, x: element.x + deltaX, y: element.y + deltaY }
+                            ? { 
+                                ...element, 
+                                x: element.x + actualDeltaX, 
+                                y: element.y + actualDeltaY 
+                              }
                             : element
                         )
                       );
                       
-                      // Update temp group bounds
+                      // Update temp group bounds to snapped position
                       setTempGroupBounds(prev => ({
                         ...prev,
-                        x: e.target.x(),
-                        y: e.target.y()
+                        x: snappedPosition.x,
+                        y: snappedPosition.y
                       }));
+                      
+                      // Clear snap guides after drag ends
+                      setShowSnapGuides([]);
                       
                       // Reset the rect position
                       e.target.x(tempGroupBounds.x);
@@ -3429,6 +3640,12 @@ const LayoutDesigner = () => {
                   }
                   return newBox;
                 }}
+                shouldOverdrawWholeArea={false}
+                ignoreStroke={true}
+                keepRatio={false}
+                centeredScaling={false}
+                rotateEnabled={false}
+                enabledAnchors={['top-left', 'top-center', 'top-right', 'middle-left', 'middle-right', 'bottom-left', 'bottom-center', 'bottom-right']}
               />
             </Layer>
           </Stage>
