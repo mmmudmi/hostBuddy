@@ -57,7 +57,7 @@ const LayoutDesigner = () => {
   // Custom elements state
   const [customElements, setCustomElements] = useState([]);
   const [isLoadingCustomElements, setIsLoadingCustomElements] = useState(false);
-  const [showCustomElementsPanel, setShowCustomElementsPanel] = useState(false);
+  const [showCustomElementsPanel, setShowCustomElementsPanel] = useState(true);
   const [customElementsFilter, setCustomElementsFilter] = useState({ search: '' });
   const [showSaveElementDialog, setShowSaveElementDialog] = useState(false);
 
@@ -86,7 +86,6 @@ const LayoutDesigner = () => {
     
     // Special Shapes
     { type: 'star', label: 'Star', icon: '★', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
-    { type: 'diamond', label: 'Diamond', icon: '♦', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
     
     // Lines and Dividers
@@ -141,12 +140,9 @@ const LayoutDesigner = () => {
     // Check if we have a single grouped/merged element
     const isSingleGrouped = elementsToSave.length === 1 && 
                            selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
-    
-    if (elementsToSave.length === 1 && !isSingleGrouped) {
-      // Don't allow saving single non-grouped elements
-      alert('Cannot save single element as custom element.\n\nTo create custom elements:\n• Select multiple elements, OR\n• Select a grouped/merged object');
-      return false;
-    }
+
+    // Allow saving any selected elements (single or multiple)
+    console.log('Saving', elementsToSave.length, 'element(s) as custom element');
 
     // Don't generate canvas thumbnail - we'll use actual Konva elements
     const thumbnail = null;
@@ -190,6 +186,141 @@ const LayoutDesigner = () => {
     }
   }, [selectedIds, selectedId, layoutElements, loadCustomElements]);
 
+  // Calculate the outline path for merged objects that follows the actual shape perimeters
+  const calculateMergedOutlinePath = useCallback((elements, offsetX, offsetY) => {
+    // Create individual shape paths and combine them
+    let combinedPath = '';
+    
+    elements.forEach((element, index) => {
+      // Use relative coordinates since the Path component will be positioned at offsetX, offsetY
+      const relativeX = element.x - offsetX;
+      const relativeY = element.y - offsetY;
+      
+      let shapePath = '';
+      
+      if (element.type === 'round') {
+        // Circle path - element x,y is center
+        const radius = element.width / 2;
+        const centerX = relativeX;
+        const centerY = relativeY;
+        shapePath = `M ${centerX + radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY} Z`;
+      } else if (element.type === 'ellipse') {
+        // Ellipse path - element x,y is center
+        const radiusX = element.width / 2;
+        const radiusY = element.height / 2;
+        const centerX = relativeX;
+        const centerY = relativeY;
+        shapePath = `M ${centerX + radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX - radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX + radiusX} ${centerY} Z`;
+      } else if (element.type === 'triangle') {
+        // Triangle path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        const point1X = centerX;
+        const point1Y = centerY - radius;
+        const point2X = centerX - radius * Math.cos(Math.PI / 6);
+        const point2Y = centerY + radius * Math.sin(Math.PI / 6);
+        const point3X = centerX + radius * Math.cos(Math.PI / 6);
+        const point3Y = centerY + radius * Math.sin(Math.PI / 6);
+        shapePath = `M ${point1X} ${point1Y} L ${point2X} ${point2Y} L ${point3X} ${point3Y} Z`;
+      } else if (element.type === 'pentagon') {
+        // Pentagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let pentagonPath = '';
+        for (let i = 0; i < 5; i++) {
+          const angle = (i * 72 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            pentagonPath += `M ${x} ${y}`;
+          } else {
+            pentagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = pentagonPath + ' Z';
+      } else if (element.type === 'hexagon') {
+        // Hexagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let hexagonPath = '';
+        for (let i = 0; i < 6; i++) {
+          const angle = (i * 60 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            hexagonPath += `M ${x} ${y}`;
+          } else {
+            hexagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = hexagonPath + ' Z';
+      } else if (element.type === 'octagon') {
+        // Octagon path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const radius = element.width / 2;
+        let octagonPath = '';
+        for (let i = 0; i < 8; i++) {
+          const angle = (i * 45 - 90) * Math.PI / 180;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            octagonPath += `M ${x} ${y}`;
+          } else {
+            octagonPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = octagonPath + ' Z';
+      } else if (element.type === 'star') {
+        // Star path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const outerRadius = element.width / 2;
+        const innerRadius = outerRadius * 0.5;
+        let starPath = '';
+        for (let i = 0; i < 10; i++) {
+          const angle = (i * 36 - 90) * Math.PI / 180;
+          const radius = i % 2 === 0 ? outerRadius : innerRadius;
+          const x = centerX + radius * Math.cos(angle);
+          const y = centerY + radius * Math.sin(angle);
+          if (i === 0) {
+            starPath += `M ${x} ${y}`;
+          } else {
+            starPath += ` L ${x} ${y}`;
+          }
+        }
+        shapePath = starPath + ' Z';
+      } else if (element.type === 'arc') {
+        // Arc path - element x,y is center
+        const centerX = relativeX;
+        const centerY = relativeY;
+        const outerRadius = element.width / 2;
+        const innerRadius = outerRadius / 2;
+        // Create arc shape (semicircle)
+        shapePath = `M ${centerX - outerRadius} ${centerY} A ${outerRadius} ${outerRadius} 0 0 1 ${centerX + outerRadius} ${centerY} L ${centerX + innerRadius} ${centerY} A ${innerRadius} ${innerRadius} 0 0 0 ${centerX - innerRadius} ${centerY} Z`;
+      } else if (element.type === 'line') {
+        // Line path - element x,y is top-left corner
+        const startX = relativeX;
+        const startY = relativeY + element.height / 2; // Center the line vertically
+        const endX = relativeX + element.width;
+        const endY = startY;
+        // Create a thin rectangle for the line border
+        const lineHeight = element.height || 2;
+        shapePath = `M ${startX} ${startY - lineHeight/2} L ${endX} ${startY - lineHeight/2} L ${endX} ${startY + lineHeight/2} L ${startX} ${startY + lineHeight/2} Z`;
+      } else {
+        // Rectangle path (including square, rectangle, text) - element x,y is top-left corner
+        shapePath = `M ${relativeX} ${relativeY} L ${relativeX + element.width} ${relativeY} L ${relativeX + element.width} ${relativeY + element.height} L ${relativeX} ${relativeY + element.height} Z`;
+      }
+      
+      combinedPath += shapePath + ' ';
+    });
+    
+    return combinedPath.trim();
+  }, []);
+
   // Add custom element to layout
   const addCustomElementToLayout = useCallback(async (customElement) => {
     if (!customElement.element_data) return;
@@ -202,15 +333,68 @@ const LayoutDesigner = () => {
     }
 
     if (customElement.element_data.type === 'group') {
-      // Add all elements from the group
       const elements = customElement.element_data.elements || [];
-      const newElements = elements.map(el => ({
-        ...el,
-        id: `${Date.now()}-${Math.random()}`,
-        x: el.x + 50, // Offset to avoid overlap
-        y: el.y + 50
-      }));
-      setLayoutElements(prev => [...prev, ...newElements]);
+      
+      // Always create a merged element when custom element is picked
+      const baseX = 100; // Base position
+      const baseY = 100;
+      
+      // Calculate bounding box for all elements
+      let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+      
+      elements.forEach(el => {
+        const bounds = getElementVisualBounds(el);
+        minX = Math.min(minX, bounds.minX);
+        minY = Math.min(minY, bounds.minY);
+        maxX = Math.max(maxX, bounds.maxX);
+        maxY = Math.max(maxY, bounds.maxY);
+      });
+      
+      const mergedId = `merged_${Date.now()}`;
+      
+      // Combine text from text elements
+      const combinedText = elements
+        .filter(el => el.type === 'text' && el.text && el.text.trim())
+        .map(el => el.text.trim())
+        .join(' ');
+      
+      // Use border properties from elements that have borders
+      const bordersWithWidth = elements.filter(el => el.borderWidth && el.borderWidth > 0);
+      const borderWidth = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderWidth : 0;
+      const borderColor = bordersWithWidth.length > 0 ? bordersWithWidth[0].borderColor : '#374151';
+      
+      // Calculate the outline path for the merged element
+      const outlinePath = calculateMergedOutlinePath(elements, minX, minY);
+      
+      // Create merged element with children positioned relative to the container
+      const mergedElement = {
+        id: mergedId,
+        type: 'merged',
+        x: baseX,
+        y: baseY,
+        width: maxX - minX,
+        height: maxY - minY,
+        color: 'transparent',
+        label: customElement.name || 'Custom Element',
+        rotation: 0,
+        text: combinedText || null,
+        borderWidth: borderWidth,
+        borderColor: borderColor,
+        outlinePath: outlinePath, // Store the calculated outline path
+        // Store original elements as children with relative coordinates
+        children: elements.map(el => ({
+          ...el,
+          id: `${Date.now()}-${Math.random()}`, // Give new IDs to children
+          // Keep relative coordinates within the merged container
+          x: el.x - minX,
+          y: el.y - minY,
+          originalText: el.text,
+          text: el.type === 'text' ? el.text : null,
+        })),
+        isMerged: true,
+      };
+      
+      setLayoutElements(prev => [...prev, mergedElement]);
       setHasUnsavedChanges(true);
     } else {
       // Add single element
@@ -224,7 +408,7 @@ const LayoutDesigner = () => {
       setLayoutElements(prev => [...prev, newElement]);
       setHasUnsavedChanges(true);
     }
-  }, []);
+  }, [calculateMergedOutlinePath]); // getElementVisualBounds is stable and doesn't need to be in deps
 
   // Delete custom element
   const deleteCustomElement = useCallback(async (elementId) => {
@@ -285,6 +469,7 @@ const LayoutDesigner = () => {
 
   // Load custom elements
   useEffect(() => {
+    loadCustomElements();
   }, [loadCustomElements]);
 
   const addElement = (elementType) => {
@@ -454,8 +639,7 @@ const LayoutDesigner = () => {
       case 'triangle':
       case 'pentagon':
       case 'hexagon':
-      case 'octagon':
-      case 'diamond': {
+      case 'octagon': {
         // Regular polygons: x,y is the CENTER, inscribed in circle with radius=width/2
         const radius = width / 2;
         return {
@@ -1230,142 +1414,6 @@ const LayoutDesigner = () => {
     setSelectedId(null);
     setHasUnsavedChanges(true);
   }, [selectedId, layoutElements]);
-
-  // Calculate the outline path for merged objects that follows the actual shape perimeters
-  const calculateMergedOutlinePath = useCallback((elements, offsetX, offsetY) => {
-    // Create individual shape paths and combine them
-    let combinedPath = '';
-    
-    elements.forEach((element, index) => {
-      // Use relative coordinates since the Path component will be positioned at offsetX, offsetY
-      const relativeX = element.x - offsetX;
-      const relativeY = element.y - offsetY;
-      
-      let shapePath = '';
-      
-      if (element.type === 'round') {
-        // Circle path - element x,y is center
-        const radius = element.width / 2;
-        const centerX = relativeX;
-        const centerY = relativeY;
-        shapePath = `M ${centerX + radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX - radius} ${centerY} A ${radius} ${radius} 0 0 1 ${centerX + radius} ${centerY} Z`;
-      } else if (element.type === 'ellipse') {
-        // Ellipse path - element x,y is center
-        const radiusX = element.width / 2;
-        const radiusY = element.height / 2;
-        const centerX = relativeX;
-        const centerY = relativeY;
-        shapePath = `M ${centerX + radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX - radiusX} ${centerY} A ${radiusX} ${radiusY} 0 0 1 ${centerX + radiusX} ${centerY} Z`;
-      } else if (element.type === 'triangle') {
-        // Triangle path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const radius = element.width / 2;
-        const point1X = centerX;
-        const point1Y = centerY - radius;
-        const point2X = centerX - radius * Math.cos(Math.PI / 6);
-        const point2Y = centerY + radius * Math.sin(Math.PI / 6);
-        const point3X = centerX + radius * Math.cos(Math.PI / 6);
-        const point3Y = centerY + radius * Math.sin(Math.PI / 6);
-        shapePath = `M ${point1X} ${point1Y} L ${point2X} ${point2Y} L ${point3X} ${point3Y} Z`;
-      } else if (element.type === 'pentagon') {
-        // Pentagon path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const radius = element.width / 2;
-        let pentagonPath = '';
-        for (let i = 0; i < 5; i++) {
-          const angle = (i * 72 - 90) * Math.PI / 180;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-          if (i === 0) {
-            pentagonPath += `M ${x} ${y}`;
-          } else {
-            pentagonPath += ` L ${x} ${y}`;
-          }
-        }
-        shapePath = pentagonPath + ' Z';
-      } else if (element.type === 'hexagon') {
-        // Hexagon path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const radius = element.width / 2;
-        let hexagonPath = '';
-        for (let i = 0; i < 6; i++) {
-          const angle = (i * 60 - 90) * Math.PI / 180;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-          if (i === 0) {
-            hexagonPath += `M ${x} ${y}`;
-          } else {
-            hexagonPath += ` L ${x} ${y}`;
-          }
-        }
-        shapePath = hexagonPath + ' Z';
-      } else if (element.type === 'octagon') {
-        // Octagon path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const radius = element.width / 2;
-        let octagonPath = '';
-        for (let i = 0; i < 8; i++) {
-          const angle = (i * 45 - 90) * Math.PI / 180;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-          if (i === 0) {
-            octagonPath += `M ${x} ${y}`;
-          } else {
-            octagonPath += ` L ${x} ${y}`;
-          }
-        }
-        shapePath = octagonPath + ' Z';
-      } else if (element.type === 'star') {
-        // Star path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const outerRadius = element.width / 2;
-        const innerRadius = outerRadius * 0.5;
-        let starPath = '';
-        for (let i = 0; i < 10; i++) {
-          const angle = (i * 36 - 90) * Math.PI / 180;
-          const radius = i % 2 === 0 ? outerRadius : innerRadius;
-          const x = centerX + radius * Math.cos(angle);
-          const y = centerY + radius * Math.sin(angle);
-          if (i === 0) {
-            starPath += `M ${x} ${y}`;
-          } else {
-            starPath += ` L ${x} ${y}`;
-          }
-        }
-        shapePath = starPath + ' Z';
-      } else if (element.type === 'arc') {
-        // Arc path - element x,y is center
-        const centerX = relativeX;
-        const centerY = relativeY;
-        const outerRadius = element.width / 2;
-        const innerRadius = outerRadius / 2;
-        // Create arc shape (semicircle)
-        shapePath = `M ${centerX - outerRadius} ${centerY} A ${outerRadius} ${outerRadius} 0 0 1 ${centerX + outerRadius} ${centerY} L ${centerX + innerRadius} ${centerY} A ${innerRadius} ${innerRadius} 0 0 0 ${centerX - innerRadius} ${centerY} Z`;
-      } else if (element.type === 'line') {
-        // Line path - element x,y is top-left corner
-        const startX = relativeX;
-        const startY = relativeY + element.height / 2; // Center the line vertically
-        const endX = relativeX + element.width;
-        const endY = startY;
-        // Create a thin rectangle for the line border
-        const lineHeight = element.height || 2;
-        shapePath = `M ${startX} ${startY - lineHeight/2} L ${endX} ${startY - lineHeight/2} L ${endX} ${startY + lineHeight/2} L ${startX} ${startY + lineHeight/2} Z`;
-      } else {
-        // Rectangle path (including square, rectangle, text) - element x,y is top-left corner
-        shapePath = `M ${relativeX} ${relativeY} L ${relativeX + element.width} ${relativeY} L ${relativeX + element.width} ${relativeY + element.height} L ${relativeX} ${relativeY + element.height} Z`;
-      }
-      
-      combinedPath += shapePath + ' ';
-    });
-    
-    return combinedPath.trim();
-  }, []);
-
 
   // Merge selected elements into a single element
   const mergeElements = useCallback(() => {
@@ -2259,20 +2307,6 @@ const LayoutDesigner = () => {
           {...shapeProps}
           sides={8}
           radius={element.width / 2}
-          width={undefined}
-          height={undefined}
-          onDblClick={() => startTextEdit(element.id)}
-          onDblTap={() => startTextEdit(element.id)}
-        />
-      );
-    }
-    else if (element.type === 'diamond') {
-      shape = (
-        <RegularPolygon
-          {...shapeProps}
-          sides={4}
-          radius={element.width / 2}
-          rotation={45}
           width={undefined}
           height={undefined}
           onDblClick={() => startTextEdit(element.id)}
@@ -3441,65 +3475,26 @@ const LayoutDesigner = () => {
           {/* Custom Elements Section */}
           <div style={styles.sidebarSection}>
             <div style={styles.sectionHeader}>
-              <h3>My Elements</h3>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: '4px', width: '100%' }}>
-                {/* Action Buttons Row */}
-                <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                  {/* Save button - works for single grouped/merged objects OR multiple selections */}
+              <h3 style={{ margin: 0 }}>My Elements</h3>
+              {/* Save button - only show when elements are selected */}
+              {(() => {
+                const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
+                return elementsToSave.length > 0 ? (
                   <button
                     onClick={() => {
-                      const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
                       console.log('Save button clicked!', { selectedIds, selectedId, elementsToSave });
-                      
-                      if (elementsToSave.length > 0) {
-                        // Check if we have a single grouped/merged element or multiple elements
-                        const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
-                        const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
-                        
-                        if (elementsToSave.length > 1 || hasGroupedElement) {
-                          setShowSaveElementDialog(true);
-                        } else {
-                          alert('To create a custom element:\n\n• Select multiple elements (Shift+Click), OR\n• Select a grouped/merged object, OR\n• Use the 🧪 Test button to auto-select');
-                        }
-                      } else {
-                        alert('Please select at least one element first!\n\nSteps:\n1. Add some shapes to canvas\n2. Click to select element(s)\n3. Save button will work');
-                      }
+                      setShowSaveElementDialog(true);
                     }}
                     style={{
                       ...styles.saveElementButton,
-                      backgroundColor: (() => {
-                        const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
-                        if (elementsToSave.length > 1) return '#10b981'; // Multiple elements - green
-                        if (elementsToSave.length === 1) {
-                          const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
-                          const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
-                          return hasGroupedElement ? '#10b981' : '#f59e0b'; // Grouped - green, single - orange
-                        }
-                        return '#94a3b8'; // No selection - gray
-                      })()
+                      backgroundColor: '#10b981' // Green when shown
                     }}
                     title="Save selected elements as custom element"
                   >
-                    💾 Save ({(() => {
-                      const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
-                      if (elementsToSave.length > 1) return 'MULTI';
-                      if (elementsToSave.length === 1) {
-                        const selectedElements = layoutElements.filter(el => elementsToSave.includes(el.id));
-                        const hasGroupedElement = selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
-                        return hasGroupedElement ? 'GROUP' : 'SINGLE';
-                      }
-                      return 'NONE';
-                    })()})
+                    💾 Save
                   </button>
-                  <button
-                    onClick={() => setShowCustomElementsPanel(!showCustomElementsPanel)}
-                    style={{...styles.toggleButton, backgroundColor: showCustomElementsPanel ? '#4f46e5' : '#6b7280'}}
-                    title="Toggle custom elements panel"
-                  >
-                    {showCustomElementsPanel ? '↑' : '↓'}
-                  </button>
-                </div>
-              </div>
+                ) : null;
+              })()}
             </div>
             
             {showCustomElementsPanel && (
@@ -3587,7 +3582,7 @@ const LayoutDesigner = () => {
                                       // Calculate proper bounds based on shape type
                                       if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
                                           child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
-                                          child.type === 'octagon' || child.type === 'diamond') {
+                                          child.type === 'octagon') {
                                         // Centered shapes - x,y is the center point
                                         const radius = Math.max(w, h) / 2;
                                         minX = Math.min(minX, x - radius);
@@ -3616,7 +3611,7 @@ const LayoutDesigner = () => {
                                       let scaledX, scaledY;
                                       if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
                                           child.type === 'triangle' || child.type === 'pentagon' || child.type === 'hexagon' || 
-                                          child.type === 'octagon' || child.type === 'diamond') {
+                                          child.type === 'octagon' ) {
                                         // Centered shapes - keep them centered
                                         scaledX = (child.x - minX) * scale + offsetX;
                                         scaledY = (child.y - minY) * scale + offsetY;
@@ -3638,9 +3633,7 @@ const LayoutDesigner = () => {
                                         strokeWidth: Math.max((child.borderWidth || 0) * scale, 0),
                                         listening: false
                                       };
-                                      
-                                      console.log(`🎨 Child ${idx} (${child.type}):`, { x: scaledX, y: scaledY, w: scaledWidth, h: scaledHeight });
-                                      
+                                                                            
                                       // Render child shapes - handle ALL shape types
                                       if (child.type === 'arc') {
                                         return <Arc {...props} innerRadius={scaledWidth / 4} outerRadius={scaledWidth / 2} angle={180} />;
@@ -3658,8 +3651,6 @@ const LayoutDesigner = () => {
                                         return <RegularPolygon {...props} sides={6} radius={scaledWidth / 2} />;
                                       } else if (child.type === 'octagon') {
                                         return <RegularPolygon {...props} sides={8} radius={scaledWidth / 2} />;
-                                      } else if (child.type === 'diamond') {
-                                        return <RegularPolygon {...props} sides={4} radius={scaledWidth / 2} rotation={45} />;
                                       } else if (child.type === 'line') {
                                         return <Line {...props} points={[0, 0, scaledWidth, 0]} stroke={child.color || '#000000'} strokeWidth={Math.max((child.height || 2) * scale, 1)} fill={undefined} />;
                                       } else if (child.type === 'text') {
@@ -3700,9 +3691,7 @@ const LayoutDesigner = () => {
                                     const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
                                     const offsetX = (60 - boundingWidth * scale) / 2;
                                     const offsetY = (60 - boundingHeight * scale) / 2;
-                                    
-                                    console.log('📐 Regular element bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
-                                    
+                                                                        
                                     return elements.map((el, idx) => {
                                       const scaledX = (el.x - minX) * scale + offsetX;
                                       const scaledY = (el.y - minY) * scale + offsetY;
@@ -3718,9 +3707,7 @@ const LayoutDesigner = () => {
                                         strokeWidth: Math.max((el.borderWidth || 0) * scale, 0),
                                         listening: false
                                       };
-                                      
-                                      console.log(`🎨 Element ${idx} (${el.type}):`, { x: scaledX, y: scaledY, w: scaledWidth, h: scaledHeight });
-                                      
+                                                                            
                                       // Render all shape types properly
                                       if (el.type === 'round') {
                                         return <Circle {...props} radius={scaledWidth / 2} />;
@@ -3786,7 +3773,7 @@ const LayoutDesigner = () => {
                   </div>
                 ) : (
                   <div style={styles.emptyState}>
-                    No custom elements yet. Select multiple elements and click the save button to create your first custom element!
+                    No custom elements yet. Select any element(s) and click the save button to create your first custom element!
                   </div>
                 )}
               </div>
@@ -3796,7 +3783,7 @@ const LayoutDesigner = () => {
           {/* Saved Layouts Section */}
           <div style={styles.sidebarSection}>
             <div style={styles.sectionHeader}>
-              <h3>Saved Layouts</h3>
+              <h3 style={{ margin: 0 }}>Saved Layouts</h3>
               <button
                 onClick={newLayout}
                 style={styles.newLayoutButton}
@@ -4463,7 +4450,6 @@ const styles = {
     borderRight: '1px solid #e2e8f0',
     padding: '1rem',
     overflowY: 'auto',
-    marginBottom: '0rem',
   },
   sidebarSection: {
     marginBottom: '2rem',
