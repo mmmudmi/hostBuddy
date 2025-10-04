@@ -63,14 +63,28 @@ const LayoutDesigner = () => {
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
 
-  // Zoom and pan state
-  const [stageScale, setStageScale] = useState(1);
-  const [stagePos, setStagePos] = useState({ x: 0, y: 0 });
-  const [containerSize, setContainerSize] = useState({ width: 800, height: 600 });
-  const STAGE_WIDTH = 800;
-  const STAGE_HEIGHT = 600;
-  const MIN_ZOOM = 0.7;
-  const MAX_ZOOM = 3;
+  // Page size state - Dynamic canvas dimensions
+  const [pageSize, setPageSize] = useState({ width: 800, height: 600 });
+  const [pageSizePreset, setPageSizePreset] = useState('custom');
+  const [showPageSizeControls, setShowPageSizeControls] = useState(false);
+  
+  // Page size presets - Define early so it can be used by other functions
+  const pageSizePresets = {
+    'custom': { width: 800, height: 600, canvasWidth: 800, canvasHeight: 600, label: 'Custom' },
+    'a4-portrait': { width: 595, height: 842, canvasWidth: 800, canvasHeight: 1132, label: 'A4 Portrait' },
+    'a4-landscape': { width: 842, height: 595, canvasWidth: 800, canvasHeight: 566, label: 'A4 Landscape' },
+    'letter-portrait': { width: 612, height: 792, canvasWidth: 800, canvasHeight: 1035, label: 'Letter Portrait' },
+    'letter-landscape': { width: 792, height: 612, canvasWidth: 800, canvasHeight: 618, label: 'Letter Landscape' },
+    'square': { width: 1000, height: 1000, canvasWidth: 800, canvasHeight: 800, label: 'Square' },
+  };
+  
+  // Use canvas dimensions from page size presets
+  const currentPreset = pageSizePresets[pageSizePreset] || pageSizePresets.custom;
+  const STAGE_WIDTH = currentPreset.canvasWidth;
+  const STAGE_HEIGHT = currentPreset.canvasHeight;
+  
+  // Calculate scale factor to fit stage within 800px width while maintaining aspect ratio
+  const CANVAS_SCALE = Math.min(800 / currentPreset.canvasWidth, 1);
 
   // Available color options
   const colorOptions = [
@@ -550,6 +564,29 @@ const LayoutDesigner = () => {
   useEffect(() => {
     loadCustomElements();
   }, [loadCustomElements]);
+
+  // Page-wide click handler for deselection
+  useEffect(() => {
+    const handlePageClick = (event) => {
+      // Check if the click is on a canvas element or UI control that should not deselect
+      const isCanvasElement = event.target.closest('canvas') || 
+                             event.target.closest('.konvajs-content') ||
+                             event.target.closest('[data-prevent-deselect]') ||
+                             event.target.closest('[data-export-dropdown]') ||
+                             event.target.closest('[data-style-dropdown]');
+      
+      // Don't deselect if clicking on canvas elements or certain UI controls
+      if (!isCanvasElement) {
+        handleDeselect();
+      }
+    };
+
+    document.addEventListener('click', handlePageClick);
+    
+    return () => {
+      document.removeEventListener('click', handlePageClick);
+    };
+  }, []);
 
   const addElement = (elementType) => {
     // Get optimal position using auto-alignment
@@ -1619,268 +1656,38 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedId, layoutElements]);
 
-  // Boundary constraint function to keep view within grid
-  const clampStagePosition = useCallback((pos, scale) => {
-    // Calculate the bounds of the scaled stage
-    const scaledStageWidth = STAGE_WIDTH * scale;
-    const scaledStageHeight = STAGE_HEIGHT * scale;
-    
-    // When zoomed out (stage smaller than container), center it
-    if (scaledStageWidth <= STAGE_WIDTH && scaledStageHeight <= STAGE_HEIGHT) {
-      return {
-        x: (STAGE_WIDTH - scaledStageWidth) / 2,
-        y: (STAGE_HEIGHT - scaledStageHeight) / 2
-      };
-    }
-    
-    // When zoomed in, use more flexible boundary constraints
-    // Allow some overshoot for better cursor-based zooming feel
-    const tolerance = 20; // pixels of tolerance for smoother zooming
-    
-    // Calculate bounds with tolerance
-    const maxX = tolerance;
-    const minX = STAGE_WIDTH - scaledStageWidth - tolerance;
-    const maxY = tolerance;
-    const minY = STAGE_HEIGHT - scaledStageHeight - tolerance;
-    
-    // Apply soft clamping - only enforce strict bounds if we're way outside
-    let clampedX = pos.x;
-    let clampedY = pos.y;
-    
-    // Horizontal clamping
-    if (scaledStageWidth > STAGE_WIDTH) {
-      if (pos.x > maxX) {
-        clampedX = Math.min(pos.x, maxX);
-      } else if (pos.x < minX) {
-        clampedX = Math.max(pos.x, minX);
-      }
-    } else {
-      clampedX = (STAGE_WIDTH - scaledStageWidth) / 2;
-    }
-    
-    // Vertical clamping
-    if (scaledStageHeight > STAGE_HEIGHT) {
-      if (pos.y > maxY) {
-        clampedY = Math.min(pos.y, maxY);
-      } else if (pos.y < minY) {
-        clampedY = Math.max(pos.y, minY);
-      }
-    } else {
-      clampedY = (STAGE_HEIGHT - scaledStageHeight) / 2;
-    }
-    
-    return { x: clampedX, y: clampedY };
-  }, [STAGE_WIDTH, STAGE_HEIGHT]);
 
-  // Zoom functionality
-  const handleWheel = useCallback((e) => {
-    e.evt.preventDefault();
-    
-    const scaleBy = 1.1;
-    const stage = stageRef.current;
-    const oldScale = stage.scaleX();
-    const pointer = stage.getPointerPosition();
-    
-    let newScale = e.evt.deltaY < 0 ? oldScale * scaleBy : oldScale / scaleBy;
-    newScale = Math.max(MIN_ZOOM, Math.min(MAX_ZOOM, newScale));
-    
-    // Calculate the point in stage coordinates that should remain stationary
-    const mousePointTo = {
-      x: (pointer.x - stage.x()) / oldScale,
-      y: (pointer.y - stage.y()) / oldScale,
-    };
-    
-    // Calculate new position to keep the point under cursor stationary
-    let newPos = {
-      x: pointer.x - mousePointTo.x * newScale,
-      y: pointer.y - mousePointTo.y * newScale,
-    };
-    
-    // Allow some padding around the canvas for more natural zooming
-    const padding = 100; // Allow 100px of empty space around the canvas
-    const scaledStageWidth = STAGE_WIDTH * newScale;
-    const scaledStageHeight = STAGE_HEIGHT * newScale;
-    
-    // Calculate boundaries with padding allowance
-    const maxX = padding;
-    const minX = STAGE_WIDTH - scaledStageWidth - padding;
-    const maxY = padding;
-    const minY = STAGE_HEIGHT - scaledStageHeight - padding;
-    
-    // Only apply boundaries if we're zoomed in enough that the stage is larger than container
-    if (scaledStageWidth > STAGE_WIDTH) {
-      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
-    } else {
-      // When zoomed out, center the stage
-      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
-    }
-    
-    if (scaledStageHeight > STAGE_HEIGHT) {
-      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
-    } else {
-      // When zoomed out, center the stage
-      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
-    }
-    
-    setStageScale(newScale);
-    setStagePos(newPos);
-  }, [MIN_ZOOM, MAX_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
 
-  const zoomIn = useCallback(() => {
-    const stage = stageRef.current;
-    const oldScale = stage.scaleX();
-    const newScale = Math.min(MAX_ZOOM, oldScale * 1.2);
-    
-    // Try to get cursor position, fall back to center if not available
-    const pointer = stage.getPointerPosition();
-    let centerX, centerY;
-    
-    if (pointer) {
-      // Zoom at cursor position
-      centerX = pointer.x;
-      centerY = pointer.y;
-    } else {
-      // Fall back to center of canvas
-      centerX = STAGE_WIDTH / 2;
-      centerY = STAGE_HEIGHT / 2;
+  const handlePageSizeChange = useCallback((preset) => {
+    const newSize = pageSizePresets[preset];
+    if (newSize) {
+      setPageSize({ width: newSize.canvasWidth, height: newSize.canvasHeight });
+      setPageSizePreset(preset);
+      setHasUnsavedChanges(true);
     }
-    
-    const mousePointTo = {
-      x: (centerX - stage.x()) / oldScale,
-      y: (centerY - stage.y()) / oldScale,
-    };
-    
-    let newPos = {
-      x: centerX - mousePointTo.x * newScale,
-      y: centerY - mousePointTo.y * newScale,
-    };
-    
-    // Allow padding around the canvas for more natural zooming
-    const padding = 100;
-    const scaledStageWidth = STAGE_WIDTH * newScale;
-    const scaledStageHeight = STAGE_HEIGHT * newScale;
-    
-    if (scaledStageWidth > STAGE_WIDTH) {
-      const maxX = padding;
-      const minX = STAGE_WIDTH - scaledStageWidth - padding;
-      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
-    } else {
-      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
-    }
-    
-    if (scaledStageHeight > STAGE_HEIGHT) {
-      const maxY = padding;
-      const minY = STAGE_HEIGHT - scaledStageHeight - padding;
-      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
-    } else {
-      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
-    }
-    
-    setStageScale(newScale);
-    setStagePos(newPos);
-  }, [MAX_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
+  }, [setHasUnsavedChanges]);
 
-  const zoomOut = useCallback(() => {
-    const stage = stageRef.current;
-    const oldScale = stage.scaleX();
-    const newScale = Math.max(MIN_ZOOM, oldScale / 1.2);
+  const handleCustomPageSize = useCallback((width, height) => {
+    const newWidth = Math.max(200, Math.min(3000, parseInt(width) || 800));
+    const newHeight = Math.max(200, Math.min(3000, parseInt(height) || 600));
     
-    // Try to get cursor position, fall back to center if not available
-    const pointer = stage.getPointerPosition();
-    let centerX, centerY;
+    // Calculate scaled canvas dimensions: canvasWidth=800, canvasHeight=800/originalWidth × originalHeight
+    const canvasWidth = 800;
+    const canvasHeight = Math.round((800 / newWidth) * newHeight);
     
-    if (pointer) {
-      // Zoom at cursor position
-      centerX = pointer.x;
-      centerY = pointer.y;
-    } else {
-      // Fall back to center of canvas
-      centerX = STAGE_WIDTH / 2;
-      centerY = STAGE_HEIGHT / 2;
-    }
-    
-    const mousePointTo = {
-      x: (centerX - stage.x()) / oldScale,
-      y: (centerY - stage.y()) / oldScale,
+    // Update the custom preset with new canvas dimensions
+    pageSizePresets.custom = {
+      ...pageSizePresets.custom,
+      width: newWidth,
+      height: newHeight,
+      canvasWidth: canvasWidth,
+      canvasHeight: canvasHeight
     };
     
-    let newPos = {
-      x: centerX - mousePointTo.x * newScale,
-      y: centerY - mousePointTo.y * newScale,
-    };
-    
-    // Allow padding around the canvas for more natural zooming
-    const padding = 100;
-    const scaledStageWidth = STAGE_WIDTH * newScale;
-    const scaledStageHeight = STAGE_HEIGHT * newScale;
-    
-    if (scaledStageWidth > STAGE_WIDTH) {
-      const maxX = padding;
-      const minX = STAGE_WIDTH - scaledStageWidth - padding;
-      newPos.x = Math.max(minX, Math.min(maxX, newPos.x));
-    } else {
-      newPos.x = (STAGE_WIDTH - scaledStageWidth) / 2;
-    }
-    
-    if (scaledStageHeight > STAGE_HEIGHT) {
-      const maxY = padding;
-      const minY = STAGE_HEIGHT - scaledStageHeight - padding;
-      newPos.y = Math.max(minY, Math.min(maxY, newPos.y));
-    } else {
-      newPos.y = (STAGE_HEIGHT - scaledStageHeight) / 2;
-    }
-    
-    setStageScale(newScale);
-    setStagePos(newPos);
-  }, [MIN_ZOOM, STAGE_WIDTH, STAGE_HEIGHT]);
-
-  const fitToCanvas = useCallback(() => {
-    if (layoutElements.length === 0) {
-      // If no elements, just reset to 1:1 scale centered
-      const clampedPos = clampStagePosition({ x: 0, y: 0 }, 1);
-      setStageScale(1);
-      setStagePos(clampedPos);
-      return;
-    }
-
-    // Calculate bounding box of all elements
-    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
-    
-    layoutElements.forEach(element => {
-      const left = element.x;
-      const top = element.y;
-      const right = element.x + element.width;
-      const bottom = element.y + element.height;
-      
-      minX = Math.min(minX, left);
-      minY = Math.min(minY, top);
-      maxX = Math.max(maxX, right);
-      maxY = Math.max(maxY, bottom);
-    });
-
-    const contentWidth = maxX - minX;
-    const contentHeight = maxY - minY;
-    
-    // Add some padding
-    const padding = 50;
-    const scaleX = (STAGE_WIDTH - padding * 2) / contentWidth;
-    const scaleY = (STAGE_HEIGHT - padding * 2) / contentHeight;
-    const scale = Math.min(scaleX, scaleY, 1); // Don't zoom in more than 100%
-    
-    // Center the content
-    const centerX = (minX + maxX) / 2;
-    const centerY = (minY + maxY) / 2;
-    
-    const newPos = {
-      x: STAGE_WIDTH / 2 - centerX * scale,
-      y: STAGE_HEIGHT / 2 - centerY * scale,
-    };
-    
-    const clampedPos = clampStagePosition(newPos, scale);
-    
-    setStageScale(scale);
-    setStagePos(clampedPos);
-  }, [layoutElements, STAGE_WIDTH, STAGE_HEIGHT, clampStagePosition]);
+    setPageSize({ width: canvasWidth, height: canvasHeight });
+    setPageSizePreset('custom');
+    setHasUnsavedChanges(true);
+  }, [setHasUnsavedChanges]);
 
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
@@ -1984,22 +1791,6 @@ const LayoutDesigner = () => {
       }
     }
     
-    // Zoom shortcuts
-    if (isCtrlOrCmd && (event.key === '=' || event.key === '+')) {
-      event.preventDefault();
-      zoomIn();
-    }
-    
-    if (isCtrlOrCmd && (event.key === '-' || event.key === '_')) {
-      event.preventDefault();
-      zoomOut();
-    }
-    
-    if (isCtrlOrCmd && event.key === '0') {
-      event.preventDefault();
-      fitToCanvas();
-    }
-    
     // Delete key - only prevent default if we have elements selected
     if (event.key === 'Delete' || event.key === 'Backspace') {
       if (selectedId || (isMultiSelect && selectedIds.length > 0)) {
@@ -2007,7 +1798,7 @@ const LayoutDesigner = () => {
         deleteElement();
       }
     }
-  }, [editingTextId, groupElements, ungroupElements, mergeElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length, layoutElements, zoomIn, zoomOut, fitToCanvas]);
+  }, [editingTextId, groupElements, ungroupElements, mergeElements, deleteElement, cutElements, copyElements, pasteElements, bringToFront, sendToBack, bringForward, sendBackward, selectedId, selectedIds, isMultiSelect, clipboard.length, layoutElements]);
 
   // Track Shift key state for temporary grouping
   const handleKeyUp = useCallback((event) => {
@@ -2038,7 +1829,7 @@ const LayoutDesigner = () => {
     };
   }, [handleKeyDown, handleKeyDownForShift, handleKeyUp]);
 
-  // Close export dropdown when clicking outside
+  // Close dropdowns when clicking outside
   useEffect(() => {
     const handleClickOutside = (event) => {
       // Check if click is outside export dropdown
@@ -2049,11 +1840,19 @@ const LayoutDesigner = () => {
       if (showStyleControls && !event.target.closest('[data-style-dropdown]')) {
         setShowStyleControls(false);
       }
+      // Check if click is outside page size dropdown
+      if (showPageSizeControls && !event.target.closest('[data-pagesize-dropdown]')) {
+        setShowPageSizeControls(false);
+      }
+      // Check if click is outside page size controls
+      if (showPageSizeControls && !event.target.closest('[data-pagesize-dropdown]')) {
+        setShowPageSizeControls(false);
+      }
     };
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportDropdown, showStyleControls]);
+  }, [showExportDropdown, showStyleControls, showPageSizeControls]);
 
   const saveLayout = async () => {
     if (!layoutTitle.trim()) {
@@ -3358,36 +3157,123 @@ const LayoutDesigner = () => {
               autoComplete="off"
             />
           )}
-          
-          {/* Snap to Grid Toggle - Hide when objects are selected */}
+
+          {/* Page Size Controls - Hide when objects are selected */}
           {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
-            <button 
-              onClick={() => setSnapToGrid(!snapToGrid)}
-              className="btn btn-small"
-              title={snapToGrid ? 'Disable snap to grid' : 'Enable snap to grid'}
-              style={{
-                backgroundColor: snapToGrid ? '#22c55e' : '#f3f4f6',
-                color: snapToGrid ? 'white' : '#374151',
-                border: `1px solid ${snapToGrid ? '#16a34a' : '#d1d5db'}`,
-                display: 'flex',
-                alignItems: 'center',
-                gap: '4px',
-                padding: '6px 12px',
-                borderRadius: '6px',
-                cursor: 'pointer',
-                fontSize: '12px',
-                transition: 'all 0.2s ease',
-                height: '26px'
-              }}
-            >
-              🧲 {snapToGrid ? 'Grid ON' : 'Grid OFF'}
-            </button>
+            <div style={{ position: 'relative', display: 'inline-block' }} data-pagesize-dropdown>
+              <button 
+                onClick={() => setShowPageSizeControls(!showPageSizeControls)}
+                className="btn btn-small"
+                title="Adjust page size"
+                style={{
+                  backgroundColor: showPageSizeControls ? '#3b82f6' : '#f3f4f6',
+                  color: showPageSizeControls ? 'white' : '#374151',
+                  border: `1px solid ${showPageSizeControls ? '#2563eb' : '#d1d5db'}`,
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 12px',
+                  borderRadius: '6px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  transition: 'all 0.2s ease',
+                  height: '26px'
+                }}
+              >
+                📐 Page Size
+                {/* 📐 {pageSize.width} × {pageSize.height} */}
+              </button>
+
+              {showPageSizeControls && (
+                <div style={{
+                  position: 'absolute',
+                  top: '100%',
+                  right: 0,
+                  backgroundColor: 'white',
+                  border: '1px solid #d1d5db',
+                  borderRadius: '8px',
+                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                  zIndex: 1000,
+                  minWidth: '280px',
+                  padding: '12px'
+                }}>
+                  <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: '#374151' }}>
+                    Page Size
+                  </div>
+                  
+                  {/* Preset Selection */}
+                  <div style={{ marginBottom: '12px' }}>
+                    <select
+                      value={pageSizePreset}
+                      onChange={(e) => handlePageSizeChange(e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 8px',
+                        borderRadius: '4px',
+                        border: '1px solid #d1d5db',
+                        fontSize: '12px'
+                      }}
+                    >
+                      <option value="custom">Custom</option>
+                      {Object.entries(pageSizePresets).map(([key, preset]) => {
+                        if (key === 'custom') return null;
+                        return (
+                          <option key={key} value={key}>
+                            {preset.label} ({preset.width} × {preset.height})
+                          </option>
+                        );
+                      })}
+                    </select>
+                  </div>
+
+                  {/* Custom Dimensions */}
+                  {pageSizePreset === 'custom' && (
+                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                          Width
+                        </label>
+                        <input
+                          type="number"
+                          min="200"
+                          max="3000"
+                          value={pageSize.width}
+                          onChange={(e) => handleCustomPageSize(e.target.value, pageSize.height)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '4px',
+                            border: '1px solid #d1d5db',
+                            fontSize: '12px'
+                          }}
+                        />
+                      </div>
+                      <div style={{ padding: '0 4px', color: '#6b7280', fontSize: '12px' }}>×</div>
+                      <div style={{ flex: 1 }}>
+                        <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                          Height
+                        </label>
+                        <input
+                          type="number"
+                          min="200"
+                          max="3000"
+                          value={pageSize.height}
+                          onChange={(e) => handleCustomPageSize(pageSize.width, e.target.value)}
+                          style={{
+                            width: '100%',
+                            padding: '4px 6px',
+                            borderRadius: '4px',
+                            border: '1px solid #d1d5db',
+                            fontSize: '12px'
+                          }}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )}
+            </div>
           )}
-          
-          {/* {hasUnsavedChanges && (
-            <span style={styles.unsavedIndicator}>●</span>
-          )} */}
-          {/* Hide these buttons when objects are selected */}
           {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
               <button 
@@ -3399,7 +3285,7 @@ const LayoutDesigner = () => {
               </button>
               
               {/* Export Dropdown */}
-              <div style={{ position: 'relative', display: 'inline-block' }} data-export-dropdown>
+              <div style={{ position: 'relative', display: 'inline-block' }} data-export-dropdown data-prevent-deselect="true">
                 <button 
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   className="btn btn-secondary btn-small"
@@ -3482,50 +3368,10 @@ const LayoutDesigner = () => {
             </>
           )}
           
-          {/* Zoom Controls - Always visible */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '4px', marginLeft: '8px' }}>
-            <button 
-              onClick={zoomOut}
-              className="btn btn-small"
-              title="Zoom out (Ctrl/Cmd + -)"
-              style={{
-                padding: '4px 8px',
-                fontSize: '14px'
-              }}
-            >
-              🔍−
-            </button>
-            <span style={{ fontSize: '12px', color: '#6b7280', minWidth: '45px', textAlign: 'center' }}>
-              {Math.round(stageScale * 100)}%
-            </span>
-            <button 
-              onClick={zoomIn}
-              className="btn btn-small"
-              title="Zoom in (Ctrl/Cmd + +)"
-              style={{
-                padding: '4px 8px',
-                fontSize: '14px'
-              }}
-            >
-              🔍+
-            </button>
-            <button 
-              onClick={fitToCanvas}
-              className="btn btn-small"
-              title="Fit to canvas (Ctrl/Cmd + 0)"
-              style={{
-                padding: '4px 8px',
-                fontSize: '12px'
-              }}
-            >
-              ⊡
-            </button>
-          </div>
-          
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
               {/* Combined Style Controls Dropdown */}
-              <div style={{ position: 'relative', display: 'inline-block' }} data-style-dropdown>
+              <div style={{ position: 'relative', display: 'inline-block' }} data-style-dropdown data-prevent-deselect="true">
                 <button 
                   onClick={() => setShowStyleControls(!showStyleControls)}
                   className="btn btn-info btn-small"
@@ -3834,7 +3680,7 @@ const LayoutDesigner = () => {
       {/* Main Content */}
       <div className="layout-content" style={styles.content}>
         {/* Sidebar */}
-        <div className="layout-sidebar" style={styles.sidebar}>
+        <div className="layout-sidebar" data-prevent-deselect="true" style={styles.sidebar}>
           <div style={styles.sidebarSection}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
               <h3 style={{ margin: 0 }}>Layout Elements</h3>
@@ -4385,17 +4231,27 @@ const LayoutDesigner = () => {
           </div>
         </div>
 
-        {/* Canvas */}
-        <div className="layout-canvas" style={styles.canvas}>
+        {/* Canvas Container */}
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: '1rem' }}>
+          {/* Canvas */}
+          <div 
+            className="layout-canvas" 
+            data-prevent-deselect="true"
+            style={{
+              ...styles.canvas,
+              width: STAGE_WIDTH * CANVAS_SCALE,
+              height: STAGE_HEIGHT * CANVAS_SCALE,
+              maxWidth: '800px',
+              padding: 0,
+              margin: '-16px',
+            }}
+          >
           <Stage
             ref={stageRef}
             width={STAGE_WIDTH}
             height={STAGE_HEIGHT}
-            scaleX={stageScale}
-            scaleY={stageScale}
-            x={stagePos.x}
-            y={stagePos.y}
-            onWheel={handleWheel}
+            scaleX={CANVAS_SCALE}
+            scaleY={CANVAS_SCALE}
             onMouseDown={(e) => {
               if (e.target === e.target.getStage()) {
                 handleDeselect();
@@ -4408,29 +4264,42 @@ const LayoutDesigner = () => {
             }}
           >
             <Layer>
-              {/* Grid background */}
-              {Array.from({ length: 40 }, (_, i) => (
-                <React.Fragment key={`grid-${i}`}>
-                  <Rect
-                    name="grid-element"
-                    x={i * 20}
-                    y={0}
-                    width={1}
-                    height={600}
-                    fill="#f0f0f0"
-                    listening={false}
-                  />
-                  <Rect
-                    name="grid-element"
-                    x={0}
-                    y={i * 15}
-                    width={800}
-                    height={1}
-                    fill="#f0f0f0"
-                    listening={false}
-                  />
-                </React.Fragment>
-              ))}
+              {/* Grid background - Dynamic based on page size */}
+              {(() => {
+                const verticalLines = Math.ceil(STAGE_WIDTH / GRID_SIZE_X) + 1;
+                const horizontalLines = Math.ceil(STAGE_HEIGHT / GRID_SIZE_Y) + 1;
+                
+                return (
+                  <>
+                    {/* Vertical grid lines */}
+                    {Array.from({ length: verticalLines }, (_, i) => (
+                      <Rect
+                        key={`grid-vertical-${i}`}
+                        name="grid-element"
+                        x={i * GRID_SIZE_X}
+                        y={0}
+                        width={1}
+                        height={STAGE_HEIGHT}
+                        fill="#f0f0f0"
+                        listening={false}
+                      />
+                    ))}
+                    {/* Horizontal grid lines */}
+                    {Array.from({ length: horizontalLines }, (_, i) => (
+                      <Rect
+                        key={`grid-horizontal-${i}`}
+                        name="grid-element"
+                        x={0}
+                        y={i * GRID_SIZE_Y}
+                        width={STAGE_WIDTH}
+                        height={1}
+                        fill="#f0f0f0"
+                        listening={false}
+                      />
+                    ))}
+                  </>
+                );
+              })()}
               
               {/* Layout elements */}
               {layoutElements.map(renderShape)}
@@ -4666,12 +4535,12 @@ const LayoutDesigner = () => {
               />
             </Layer>
           </Stage>
+          </div>
         </div>
-      </div>
 
       {/* Text Editing Modal */}
       {editingTextId && (
-        <div style={styles.textEditModal}>
+        <div data-prevent-deselect="true" style={styles.textEditModal}>
           <div style={styles.textEditBox}>
             <h3 style={styles.textEditTitle}>Edit Text</h3>
             <textarea
@@ -4711,7 +4580,7 @@ const LayoutDesigner = () => {
 
       {/* Color Picker Modal */}
       {showColorPicker && (selectedId || (isMultiSelect && selectedIds.length > 0)) && (
-        <div style={styles.colorPickerModal}>
+        <div data-prevent-deselect="true" style={styles.colorPickerModal}>
           <div style={styles.colorPickerBox}>
             <h3 style={styles.colorPickerTitle}>Choose Color</h3>
             <div style={styles.colorGrid}>
@@ -4742,7 +4611,7 @@ const LayoutDesigner = () => {
 
       {/* Border Controls Modal */}
       {showBorderControls && (selectedId || (isMultiSelect && selectedIds.length > 0)) && (
-        <div style={styles.borderControlsModal}>
+        <div data-prevent-deselect="true" style={styles.borderControlsModal}>
           <div style={styles.borderControlsBox}>
             <h3 style={styles.borderControlsTitle}>Border Settings</h3>
             
@@ -4866,7 +4735,7 @@ const LayoutDesigner = () => {
 
       {/* Save Element Dialog */}
       {showSaveElementDialog && (
-        <div style={styles.modal}>
+        <div data-prevent-deselect="true" style={styles.modal}>
           <div style={styles.modalContent}>
             <h3>Save Custom Element</h3>
             <form onSubmit={async (e) => {
@@ -4923,7 +4792,7 @@ const LayoutDesigner = () => {
 
       {/* Delete Confirmation Dialog */}
       {showDeleteConfirm && (
-        <div style={styles.modal}>
+        <div data-prevent-deselect="true" style={styles.modal}>
           <div style={styles.modalContent}>
             <h3>Delete Custom Element</h3>
             <p>Are you sure you want to delete this custom element? This action cannot be undone.</p>
@@ -4947,6 +4816,7 @@ const LayoutDesigner = () => {
           </div>
         </div>
       )}
+      </div>
     </div>
   );
 };
@@ -4961,7 +4831,7 @@ const styles = {
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: '1rem 2rem',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffffff',
     borderBottom: '1px solid #e2e8f0',
   },
   toolbarLeft: {
@@ -5003,10 +4873,11 @@ const styles = {
   content: {
     display: 'flex',
     height: 'calc(100vh - 120px)',
+    overflow: 'hidden',
   },
   sidebar: {
     width: '300px',
-    backgroundColor: '#f8fafc',
+    backgroundColor: '#ffffffff',
     borderRight: '1px solid #e2e8f0',
     padding: '1rem',
     overflowY: 'auto',
@@ -5115,12 +4986,13 @@ const styles = {
     lineHeight: '1.3',
   },
   canvas: {
-    flex: 1,
     backgroundColor: 'white',
     display: 'flex',
     justifyContent: 'center',
     alignItems: 'flex-start',
     padding: '1rem',
+    marginLeft: 'auto',
+    marginRight: 'auto',
   },
   textEditModal: {
     position: 'fixed',
