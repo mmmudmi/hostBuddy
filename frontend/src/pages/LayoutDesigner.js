@@ -3105,7 +3105,7 @@ const LayoutDesigner = () => {
   }
 
   return (
-    <div className="layout-designer">
+    <div className="layout-designer" style={{ height: `100%` }}>
       {/* Toolbar */}
       <div className="layout-toolbar" style={styles.toolbar}>
         <div style={styles.toolbarLeft}>
@@ -4232,7 +4232,7 @@ const LayoutDesigner = () => {
         </div>
 
         {/* Canvas Container */}
-        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'auto', padding: '1rem' }}>
+        <div style={{ flex: 1, display: 'flex', justifyContent: 'center', alignItems: 'flex-start', overflow: 'visible', padding: '1rem' }}>
           {/* Canvas */}
           <div 
             className="layout-canvas" 
@@ -4243,7 +4243,8 @@ const LayoutDesigner = () => {
               height: STAGE_HEIGHT * CANVAS_SCALE,
               maxWidth: '800px',
               padding: 0,
-              margin: '-16px',
+              marginTop: '-16px',
+              
             }}
           >
           <Stage
@@ -4872,8 +4873,8 @@ const styles = {
   },
   content: {
     display: 'flex',
-    height: 'calc(100vh - 120px)',
-    overflow: 'hidden',
+    minHeight: 'calc(100vh - 120px)', 
+    overflow: 'visible',
   },
   sidebar: {
     width: '300px',
