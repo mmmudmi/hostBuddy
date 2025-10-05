@@ -15,14 +15,6 @@ const Dashboard = () => {
     dispatch(fetchEvents());
   }, [dispatch]);
 
-  // Debug: Log the events structure to understand the field names
-  useEffect(() => {
-    if (events.length > 0) {
-      console.log('Events structure:', events[0]);
-      console.log('Available fields:', Object.keys(events[0]));
-    }
-  }, [events]);
-
   const handleDeleteEvent = async (eventId) => {
     // Debug: Log the event ID to understand what we're working with
     console.log('Attempting to delete event with ID:', eventId, 'Type:', typeof eventId);
@@ -58,18 +50,27 @@ const Dashboard = () => {
     }
   };
 
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    return date.toLocaleDateString('en-US', {
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
+  const formatTime = (event) => {
+    if (!event.start_time) return 'No time set';
+    const startTime = new Date(`1970-01-01T${event.start_time}`);
+    const endTime = event.end_time ? new Date(`1970-01-01T${event.end_time}`) : null;
+    if (endTime && endTime.getTime() !== startTime.getTime()) {
+      return `${startTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })} - ${endTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`;
+    }
+    return startTime.toLocaleTimeString('en-US', {
       hour: '2-digit',
       minute: '2-digit',
     });
   };
 
   const formatEventDates = (event) => {
+    console.log('Formatting dates for event:', event);
     if (!event.start_date) return 'No date set';
     
     const startDate = new Date(event.start_date);
@@ -85,14 +86,11 @@ const Dashboard = () => {
         year: 'numeric' 
       })}`;
     } else {
-      const timeStr = event.start_time && event.end_time 
-        ? ` ${event.start_time}-${event.end_time}`
-        : '';
-      return `${startDate.toLocaleDateString('en-US', { 
-        year: 'numeric', 
-        month: 'short', 
-        day: 'numeric' 
-      })}${timeStr}`;
+      return `${startDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })}`;
     }
   };
 
@@ -109,74 +107,12 @@ const Dashboard = () => {
   }
 
   return (
-    <div className="dashboard">
+    <div className="dashboard background">
       <div className="container">
-        <div className="dashboard-header">
-          <div>
-            <h1 className="dashboard-title">
-              Welcome back, {user?.full_name || 'User'}!
-            </h1>
-            <p style={styles.subtitle}>
-              Manage your events and create amazing experiences
-            </p>
-          </div>
-          <Link to="/create-event" className="btn btn-primary">
-            Create New Event
-          </Link>
-        </div>
 
         {error && (
           <div style={styles.errorMessage}>
             {error}
-          </div>
-        )}
-
-        {events.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-state-icon">
-              📅
-            </div>
-            <h3>No events yet</h3>
-            <p>
-              Create your first event to get started with Host Buddy
-            </p>
-            <Link to="/create-event" className="btn btn-primary">
-              Create Your First Event
-            </Link>
-          </div>
-        ) : (
-          <div className="events-grid">
-            {events.map((event) => (
-              <div 
-                key={event.event_id} 
-                className="event-card"
-                onClick={() => navigate(`/events/${event.event_id}`)}
-                style={{ cursor: 'pointer' }}
-              >
-                {event.images && event.images.length > 0 && (
-                  <img 
-                    src={event.images[0]} 
-                    alt={event.title}
-                    className="event-image"
-                  />
-                )}
-                
-                <div className="event-content">
-                  <h3 className="event-title">{event.title}</h3>
-                  <p className="event-description">
-                    {event.description?.length > 100 
-                      ? `${event.description.substring(0, 100)}...`
-                      : event.description
-                    }
-                  </p>
-                  
-                  <div className="event-meta">
-                    <div key="location">📍 {event.location}</div>
-                    <div key="date">📅 {formatEventDates(event)}</div>
-                  </div>
-                </div>
-              </div>
-            ))}
           </div>
         )}
 
@@ -203,6 +139,65 @@ const Dashboard = () => {
             </div>
           </div>
         )}
+
+        <div style={styles.eventsContainer}>
+          <div style={styles.eventsHeader}>
+            <h3 style={{marginBottom: '1rem'}}>Your Events</h3>
+            <Link to="/create-event" className="btn" style={styles.circleBtn}>
+              +
+            </Link>
+          </div>
+          {events.length === 0 ? (
+            <div className="empty-state">
+              <div className="empty-state-icon">
+                📅
+              </div>
+              <h3>No events yet</h3>
+              <p>
+                Create your first event to get started with Host Buddy
+              </p>
+              <Link to="/create-event" className="btn btn-primary">
+                Create Your First Event
+              </Link>
+            </div>
+          ) : (
+            <div className="events-grid">
+              {events.map((event) => (
+                <div 
+                  key={event.event_id} 
+                  className="event-card"
+                  onClick={() => navigate(`/events/${event.event_id}`)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  {event.images && event.images.length > 0 && (
+                    <img 
+                      src={event.images[0]} 
+                      alt={event.title}
+                      className="event-image"
+                    />
+                  )}
+                  
+                  <div className="event-content">
+                    <h3 className="event-title">{event.title}</h3>
+                    <p className="event-description">
+                      {event.description?.length > 100 
+                        ? `${event.description.substring(0, 100)}...`
+                        : event.description
+                      }
+                    </p>
+                    
+                    <div className="event-meta">
+                      <div key="location" style={{paddingBottom: '0.5rem'}}>📍 {event.location}</div>
+                      <div key="date" style={{paddingBottom: '0.5rem'}}>📅 {formatEventDates(event)}</div>
+                      <div key="time" style={{paddingBottom: '0.5rem'}}>⏰ {formatTime(event)}</div>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+
       </div>
     </div>
   );
@@ -223,11 +218,41 @@ const styles = {
     fontSize: '14px',
   },
   summary: {
-    marginTop: '3rem',
+    margin: '2rem',
     padding: '2rem',
     backgroundColor: 'white',
     borderRadius: '12px',
     boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+  },
+  eventsContainer: {
+    margin: '2rem',
+    padding: '2rem',
+    backgroundColor: 'white',
+    borderRadius: '12px',
+    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1)',
+  },
+  eventsHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '1rem',
+  },
+  circleBtn: {
+    margin: '-2rem -1rem 0 0',
+    width: '40px',
+    height: '40px',
+    borderRadius: '50%',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    fontSize: '1.5rem',
+    fontWeight: 'bold',
+    color: '#000000ff',
+    backgroundColor: '#ffffffff',
+    border: 'none',
+    textDecoration: 'none',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1)',
+    transition: 'all 0.2s ease',
   },
   statsGrid: {
     display: 'grid',
@@ -244,7 +269,7 @@ const styles = {
   statNumber: {
     fontSize: '2rem',
     fontWeight: 'bold',
-    color: '#3b82f6',
+    color: '#000000ff',
   },
   statLabel: {
     fontSize: '0.875rem',

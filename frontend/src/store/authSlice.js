@@ -41,12 +41,21 @@ export const loginUser = createAsyncThunk(
     try {
       console.log('Attempting login with authAPI...');
       const response = await authAPI.login(email, password);
-      console.log('Login API response:', response);
       storeToken(response.access_token, response.expires_at);
       return response;
     } catch (error) {
-      console.error('Login error:', error);
-      return rejectWithValue(parseErrorResponse(error));
+      console.error('Error details:', {
+        message: error.message,
+        response: error.response,
+        status: error.response?.status,
+        data: error.response?.data
+      });
+      const parsedError = parseErrorResponse(error);
+      
+      // Test with a hardcoded error to see if the problem is with parsing
+      // return rejectWithValue('TEST ERROR MESSAGE');
+      
+      return rejectWithValue(parsedError);
     }
   }
 );
@@ -132,9 +141,11 @@ const authSlice = createSlice({
         state.error = null;
       })
       .addCase(loginUser.rejected, (state, action) => {
+        console.log('Login rejected reducer called with payload:', action.payload);
         state.isLoading = false;
         state.error = action.payload;
         state.isAuthenticated = false;
+        console.log('Error state set to:', state.error);
       })
       // Register
       .addCase(registerUser.pending, (state) => {

@@ -26,8 +26,14 @@ const SignupPage = () => {
   }, [isAuthenticated, navigate]);
 
   useEffect(() => {
-    dispatch(clearError());
-  }, [dispatch]);
+    if (error) {
+      const timer = setTimeout(() => {
+        dispatch(clearError());
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
 
   const handleChange = (e) => {
     setFormData({
@@ -78,14 +84,15 @@ const SignupPage = () => {
       setFormErrors(errors);
       return;
     }
-    
-    const result = await dispatch(registerUser({
+        
+    // Dispatch the action without unwrap() to let Redux handle the error state
+    const resultAction = await dispatch(registerUser({
       email: formData.email,
       password: formData.password,
       name: formData.full_name,
     }));
     
-    if (registerUser.fulfilled.match(result)) {
+    if (registerUser.fulfilled.match(resultAction)) {
       navigate('/login', { 
         state: { message: 'Registration successful! Please log in.' }
       });
@@ -99,14 +106,23 @@ const SignupPage = () => {
   return (
     <div className="auth-container background" style={{ position: 'relative', minHeight: '100vh' }}>
       <AnimatedBackground />
+      
+      {/* Floating Error Message */}
+      {error && (
+        <div className="floating-error-message">
+          <span>{error}</span>
+          <button 
+            onClick={() => dispatch(clearError())}
+            className="error-close-btn"
+            aria-label="Close error message"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
       <div className="auth-card" style={{ position: 'relative', zIndex: 10 }}>
-        {/* <h1 className="auth-title">Create Account</h1> */}
-        
-        {error && (
-          <div style={styles.errorMessage}>
-            {error}
-          </div>
-        )}
+        <h1 className="auth-title">Create Account</h1>
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -125,7 +141,7 @@ const SignupPage = () => {
               autoComplete="name"
             />
             {formErrors.full_name && (
-              <div style={styles.fieldError}>{formErrors.full_name}</div>
+              <div className="field-error">{formErrors.full_name}</div>
             )}
           </div>
           
@@ -145,7 +161,7 @@ const SignupPage = () => {
               autoComplete="email"
             />
             {formErrors.email && (
-              <div style={styles.fieldError}>{formErrors.email}</div>
+              <div className="field-error">{formErrors.email}</div>
             )}
           </div>
           
@@ -165,7 +181,7 @@ const SignupPage = () => {
               autoComplete="new-password"
             />
             {formErrors.password && (
-              <div style={styles.fieldError}>{formErrors.password}</div>
+              <div className="field-error">{formErrors.password}</div>
             )}
           </div>
           
@@ -185,7 +201,7 @@ const SignupPage = () => {
               autoComplete="new-password"
             />
             {formErrors.confirmPassword && (
-              <div style={styles.fieldError}>{formErrors.confirmPassword}</div>
+              <div className="field-error">{formErrors.confirmPassword}</div>
             )}
           </div>
           
@@ -200,27 +216,11 @@ const SignupPage = () => {
         </form>
         
         <div className="auth-link">
-          Already have an account? <Link to="/login">Sign in here</Link>
+          Already have an account? <Link to="/login">Log in here</Link>
         </div>
       </div>
     </div>
   );
-};
-
-const styles = {
-  errorMessage: {
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    padding: '12px',
-    borderRadius: '6px',
-    marginBottom: '1rem',
-    fontSize: '14px',
-  },
-  fieldError: {
-    color: '#dc2626',
-    fontSize: '12px',
-    marginTop: '4px',
-  },
 };
 
 export default SignupPage;

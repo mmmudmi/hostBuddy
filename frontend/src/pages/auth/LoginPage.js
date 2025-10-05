@@ -14,16 +14,24 @@ const LoginPage = () => {
   const dispatch = useDispatch();
   const navigate = useNavigate();
   const { isLoading, error, isAuthenticated } = useSelector((state) => state.auth);
-
+  
+  // Debug error state
+  useEffect(() => {
+  }, [error, isLoading, isAuthenticated]);
   useEffect(() => {
     if (isAuthenticated) {
       navigate('/dashboard');
     }
   }, [isAuthenticated, navigate]);
-
   useEffect(() => {
-    dispatch(clearError());
-  }, [dispatch]);
+    if (error) {
+      const timer = setTimeout(() => {
+        dispatch(clearError());
+      }, 3000);
+      
+      return () => clearTimeout(timer);
+    }
+  }, [error, dispatch]);
 
   const handleChange = (e) => {
     setFormData({
@@ -36,18 +44,16 @@ const LoginPage = () => {
     e.preventDefault();
     console.log('Login attempt with:', { email: formData.email, password: '***' });
     
-    const result = await dispatch(loginUser({
+    // Dispatch the action without unwrap() to let Redux handle the error state
+    const resultAction = await dispatch(loginUser({
       email: formData.email,
       password: formData.password,
     }));
     
-    console.log('Login result:', result);
-    
-    if (loginUser.fulfilled.match(result)) {
+    if (loginUser.fulfilled.match(resultAction)) {
       navigate('/dashboard');
     } else {
-      console.log('Login failed:', result.payload);
-    }
+      console.error('Login failed:', resultAction.payload || resultAction.error);}
   };
 
   if (isLoading) {
@@ -57,13 +63,23 @@ const LoginPage = () => {
   return (
     <div className="auth-container background" style={{ position: 'relative', minHeight: '100vh' }}>
       <AnimatedBackground />
+      
+      {/* Floating Error Message */}
+      {error && (
+        <div className="floating-error-message">
+          <span>{error}</span>
+          <button 
+            onClick={() => dispatch(clearError())}
+            className="error-close-btn"
+            aria-label="Close error message"
+          >
+            ✕
+          </button>
+        </div>
+      )}
+      
       <div className="auth-card" style={{ position: 'relative', zIndex: 10 }}>
         <h1 className="auth-title">Welcome Back</h1>
-        {error && (
-          <div style={styles.errorMessage}>
-            {error}
-          </div>
-        )}
         
         <form onSubmit={handleSubmit}>
           <div className="form-group">
@@ -106,7 +122,7 @@ const LoginPage = () => {
             style={{ width: '100%' }}
             disabled={isLoading}
           >
-            {isLoading ? 'Signing In...' : 'Sign In'}
+            {isLoading ? 'Logging In...' : 'Log In'}
           </button>
         </form>
         
@@ -116,17 +132,6 @@ const LoginPage = () => {
       </div>
     </div>
   );
-};
-
-const styles = {
-  errorMessage: {
-    backgroundColor: '#fee2e2',
-    color: '#dc2626',
-    padding: '12px',
-    borderRadius: '6px',
-    marginBottom: '1rem',
-    fontSize: '14px',
-  },
 };
 
 export default LoginPage;

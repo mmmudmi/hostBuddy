@@ -107,31 +107,39 @@ code {
 .form-input {
   width: 100%;
   padding: 12px 16px;
-  border: 2px solid #d1d5db;
-  border-radius: 8px;
+  border-radius: 10px;
   font-size: 16px;
-  transition: border-color 0.2s ease;
+  
+  border: none;
+  outline: none;
+  background-color: #fdfdfd;
+  box-shadow: inset 2px 5px 10px rgba(0,0,0,0.1);
+  transition: 300ms ease-in-out;
 }
 
 .form-input:focus {
-  outline: none;
-  border-color: #3b82f6;
+  background-color: #ffffff;
+  box-shadow: inset 2px 5px 10px rgba(0,0,0,0.05);
 }
 
 .form-textarea {
-  width: 100%;
-  padding: 12px 16px;
-  border: 2px solid #d1d5db;
-  border-radius: 8px;
   font-size: 16px;
   min-height: 120px;
   resize: vertical;
-  transition: border-color 0.2s ease;
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 10px;
+  font-size: 16px;
+  border: none;
+  outline: none;
+  background-color: #fdfdfd;
+  box-shadow: inset 2px 5px 10px rgba(0,0,0,0.1);
+  transition: 300ms ease-in-out;
 }
 
 .form-textarea:focus {
-  outline: none;
-  border-color: #3b82f6;
+  background-color: #ffffff;
+  box-shadow: inset 2px 5px 10px rgba(0,0,0,0.05);
 }
 
 .text-center {
@@ -179,4 +187,21 @@ code {
   .md\\:grid-cols-3 {
     grid-template-columns: repeat(3, minmax(0, 1fr));
   }
+}
+
+/* Animation for floating error messages */
+@keyframes slideDown {
+  from {
+    opacity: 0;
+    transform: translateX(-50%) translateY(-20px);
+  }
+  to {
+    opacity: 1;
+    transform: translateX(-50%) translateY(0);
+  }
+}
+
+/* Error message close button hover effect */
+.error-close-btn:hover {
+  opacity: 1 !important;
 }

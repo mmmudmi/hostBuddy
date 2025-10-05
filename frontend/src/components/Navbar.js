@@ -31,7 +31,7 @@ const Navbar = () => {
               </span>
               <button 
                 onClick={handleLogout}
-                style={{...styles.navLink, ...styles.logoutBtn}}
+                className="btn btn-transparent"
               >
                 Logout
               </button>

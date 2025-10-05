@@ -91,6 +91,48 @@ const CreateEvent = () => {
     }
   };
 
+  const removeImage = () => {
+    setImageFile(null);
+    setImagePreview('');
+    setFormData({
+      ...formData,
+      image_url: ''
+    });
+    // Clear the file input
+    const fileInput = document.getElementById('image');
+    if (fileInput) {
+      fileInput.value = '';
+    }
+  };
+
+  const clearStartTime = () => {
+    setFormData({
+      ...formData,
+      start_time: ''
+    });
+    // Clear field-specific errors
+    if (formErrors.start_time) {
+      setFormErrors({
+        ...formErrors,
+        start_time: ''
+      });
+    }
+  };
+
+  const clearEndTime = () => {
+    setFormData({
+      ...formData,
+      end_time: ''
+    });
+    // Clear field-specific errors
+    if (formErrors.end_time) {
+      setFormErrors({
+        ...formErrors,
+        end_time: ''
+      });
+    }
+  };
+
   const uploadImage = async () => {
     if (!imageFile) return formData.image_url;
     
@@ -113,10 +155,6 @@ const CreateEvent = () => {
       errors.title = 'Event title is required';
     }
     
-    if (!formData.description.trim()) {
-      errors.description = 'Event description is required';
-    }
-    
     if (!formData.location.trim()) {
       errors.location = 'Event location is required';
     }
@@ -127,10 +165,6 @@ const CreateEvent = () => {
     
     if (!formData.start_time) {
       errors.start_time = 'Start time is required';
-    }
-    
-    if (!formData.end_time) {
-      errors.end_time = 'End time is required';
     }
     
     // Validate date range
@@ -199,14 +233,8 @@ const CreateEvent = () => {
   }
 
   return (
-    <div style={styles.container}>
+    <div className="background" style={styles.container}>
       <div className="container">
-        <div style={styles.header}>
-          <h1>{isEditing ? 'Edit Event' : 'Create New Event'}</h1>
-          <p style={styles.subtitle}>
-            {isEditing ? 'Update your event details' : 'Fill in the details for your new event'}
-          </p>
-        </div>
 
         {error && (
           <div style={styles.errorMessage}>
@@ -215,6 +243,9 @@ const CreateEvent = () => {
         )}
 
         <div style={styles.formContainer}>
+          <div style={styles.header}>
+            <h1>{isEditing ? 'Edit Event' : 'Create New Event'}</h1>
+          </div>
           <form onSubmit={handleSubmit}>
             <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '2rem' }}>
               <div>
@@ -295,14 +326,27 @@ const CreateEvent = () => {
                     <label htmlFor="start_time" className="form-label">
                       Start Time *
                     </label>
-                    <input
-                      type="time"
-                      id="start_time"
-                      name="start_time"
-                      value={formData.start_time}
-                      onChange={handleChange}
-                      className="form-input"
-                    />
+                    <div style={styles.timeInputContainer}>
+                      <input
+                        type="time"
+                        id="start_time"
+                        name="start_time"
+                        value={formData.start_time}
+                        onChange={handleChange}
+                        className="form-input"
+                        style={styles.timeInput}
+                      />
+                      {formData.start_time && (
+                        <button
+                          type="button"
+                          onClick={clearStartTime}
+                          style={styles.clearTimeBtn}
+                          title="Clear start time"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     {formErrors.start_time && (
                       <div style={styles.fieldError}>{formErrors.start_time}</div>
                     )}
@@ -310,16 +354,29 @@ const CreateEvent = () => {
 
                   <div className="form-group">
                     <label htmlFor="end_time" className="form-label">
-                      End Time *
+                      End Time
                     </label>
-                    <input
-                      type="time"
-                      id="end_time"
-                      name="end_time"
-                      value={formData.end_time}
-                      onChange={handleChange}
-                      className="form-input"
-                    />
+                    <div style={styles.timeInputContainer}>
+                      <input
+                        type="time"
+                        id="end_time"
+                        name="end_time"
+                        value={formData.end_time}
+                        onChange={handleChange}
+                        className="form-input"
+                        style={styles.timeInput}
+                      />
+                      {formData.end_time && (
+                        <button
+                          type="button"
+                          onClick={clearEndTime}
+                          style={styles.clearTimeBtn}
+                          title="Clear end time"
+                        >
+                          ×
+                        </button>
+                      )}
+                    </div>
                     {formErrors.end_time && (
                       <div style={styles.fieldError}>{formErrors.end_time}</div>
                     )}
@@ -330,7 +387,7 @@ const CreateEvent = () => {
               <div>
                 <div className="form-group">
                   <label htmlFor="description" className="form-label">
-                    Description *
+                    Description
                   </label>
                   <textarea
                     id="description"
@@ -347,23 +404,39 @@ const CreateEvent = () => {
                 </div>
 
                 <div className="form-group">
-                  <label htmlFor="image" className="form-label">
-                    Event Image
-                  </label>
+                  <div style={styles.imageHeader}>
+                    <label htmlFor="image" className="form-label">
+                      Event Image
+                    </label>
+                    <label htmlFor="image" className='btn btn-upload'>
+                      <i class="fa-solid fa-upload" style={{ marginRight: '0.3rem' }}></i>
+                      Upload
+                    </label>
+                  </div>
                   <input
                     type="file"
                     id="image"
                     accept="image/*"
                     onChange={handleImageChange}
-                    className="form-input"
+                    style={styles.hiddenFileInput}
                   />
                   {imagePreview && (
-                    <div style={styles.imagePreview}>
-                      <img 
-                        src={imagePreview} 
-                        alt="Event preview"
-                        style={styles.previewImage}
-                      />
+                    <div style={styles.imagePreviewContainer}>
+                      <div style={styles.imagePreview}>
+                        <img 
+                          src={imagePreview} 
+                          alt="Event preview"
+                          style={styles.previewImage}
+                        />
+                        <button
+                          type="button"
+                          onClick={removeImage}
+                          style={styles.removeImageBtn}
+                          title="Remove image"
+                        >
+                          ×
+                        </button>
+                      </div>
                     </div>
                   )}
                 </div>
@@ -374,13 +447,13 @@ const CreateEvent = () => {
               <button 
                 type="button"
                 onClick={() => navigate('/dashboard')}
-                className="btn btn-secondary"
+                className="btn btn-cancel"
               >
                 Cancel
               </button>
               <button 
                 type="submit" 
-                className="btn btn-primary"
+                className="btn btn-green"
                 disabled={isLoading || isUploading}
               >
                 {isUploading 
@@ -444,21 +517,83 @@ const styles = {
     fontSize: '12px',
     marginTop: '4px',
   },
-  imagePreview: {
+  imageHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: '0.5rem',
+  },
+  hiddenFileInput: {
+    display: 'none',
+  },
+  imagePreviewContainer: {
+    display: 'flex',
+    justifyContent: 'center',
     marginTop: '1rem',
+  },
+  imagePreview: {
+    position: 'relative',
+    display: 'inline-block',
   },
   previewImage: {
     width: '100%',
-    maxWidth: '300px',
-    height: '200px',
+    maxWidth: '400px',
     objectFit: 'cover',
     borderRadius: '8px',
     border: '1px solid #e5e7eb',
+    marginTop: '0.5rem',
+  },
+  removeImageBtn: {
+    position: 'absolute',
+    top: '8px',
+    right: '8px',
+    backgroundColor: 'rgba(220, 38, 38, 0.9)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '25px',
+    height: '25px',
+    fontSize: '16px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
+    transition: 'all 0.2s ease',
+    margin: '-1rem -1.5rem 0 0',
   },
   timeRow: {
     display: 'grid',
     gridTemplateColumns: '1fr 1fr',
     gap: '1rem',
+  },
+  timeInputContainer: {
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+  },
+  timeInput: {
+    flex: 1,
+    paddingRight: '35px',
+  },
+  clearTimeBtn: {
+    position: 'absolute',
+    right: '8px',
+    backgroundColor: 'rgba(107, 114, 128, 0.7)',
+    color: 'white',
+    border: 'none',
+    borderRadius: '50%',
+    width: '20px',
+    height: '20px',
+    fontSize: '14px',
+    fontWeight: 'bold',
+    cursor: 'pointer',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    transition: 'all 0.2s ease',
+    zIndex: 1,
   },
 };
 

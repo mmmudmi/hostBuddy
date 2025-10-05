@@ -10,15 +10,12 @@ const AnimatedBackground = ({ className, style }) => {
       return;
     }
 
-    console.log('Canvas found, setting up...');
-
     // Set canvas size
     const resizeCanvas = () => {
       const parent = canvas.parentElement;
       if (parent) {
         canvas.width = parent.offsetWidth;
         canvas.height = parent.offsetHeight;
-        console.log('Canvas resized to:', canvas.width, 'x', canvas.height);
       }
     };
 
@@ -28,13 +25,11 @@ const AnimatedBackground = ({ className, style }) => {
     const ctx = canvas.getContext('2d');
     ctx.fillStyle = 'rgba(59, 130, 246, 0.5)';
     ctx.fillRect(0, canvas.height - 100, canvas.width, 100);
-    console.log('Simple rectangle drawn');
 
     // Now try Paper.js
     try {
       const paper = require('paper');
       paper.setup(canvas);
-      console.log('Paper.js setup complete, view size:', paper.view.size);
 
       var width, height, center;
       var points = 10;
@@ -43,7 +38,6 @@ const AnimatedBackground = ({ className, style }) => {
       var mousePos = paper.view.center.divide(2);
       var pathHeight = mousePos.y;
       path.fillColor = new paper.Color(1, 1, 1, 0.06);
-      console.log('Path created with fill color:', path.fillColor);
       
       function initializePath() {
         center = paper.view.center;
@@ -56,7 +50,6 @@ const AnimatedBackground = ({ className, style }) => {
           path.add(point);
         }
         path.add(paper.view.bounds.bottomRight);
-        console.log('Path initialized with', path.segments.length, 'segments');
       }
 
       function onFrame(event) {
@@ -98,8 +91,6 @@ const AnimatedBackground = ({ className, style }) => {
       paper.view.onMouseMove = onMouseMove;
       paper.view.onMouseDown = onMouseDown;
       paper.view.onResize = onResize;
-
-      console.log('Paper.js animation started');
 
     } catch (error) {
       console.error('Paper.js error:', error);
