@@ -7,6 +7,13 @@ import layoutAPI from '../utils/api/layoutAPI';
 import userElementsAPI from '../utils/api/userElementsAPI';
 import jsPDF from 'jspdf';
 import LoadingSpinner from '../components/LoadingSpinner';
+import Icon from '@mdi/react';
+import { 
+  mdiArrangeBringToFront, 
+  mdiArrangeBringForward, 
+  mdiArrangeSendBackward, 
+  mdiArrangeSendToBack 
+} from '@mdi/js';
 
 const LayoutDesigner = () => {
   const { id } = useParams();
@@ -36,6 +43,7 @@ const LayoutDesigner = () => {
   const [showBorderControls, setShowBorderControls] = useState(false);
   const [showExportDropdown, setShowExportDropdown] = useState(false);
   const [showStyleControls, setShowStyleControls] = useState(false);
+  const [showLayerDropdown, setShowLayerDropdown] = useState(false);
   const [showInfoHover, setShowInfoHover] = useState(false);
   
   // Interactive states for border controls
@@ -62,6 +70,17 @@ const LayoutDesigner = () => {
   const [showSaveElementDialog, setShowSaveElementDialog] = useState(false);
 
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(null);
+
+  // Element duplication state
+  const [showDuplicationModal, setShowDuplicationModal] = useState(false);
+  const [duplicationConfig, setDuplicationConfig] = useState({
+    startValue: '1',
+    endValue: '5',
+    increment: 1,
+    duplicateCount: 5,
+    direction: 'right', // 'left', 'right', 'up', 'down'
+    gap: 20,
+  });
 
   // Page size state - Dynamic canvas dimensions
   const [pageSize, setPageSize] = useState({ width: 800, height: 600 });
@@ -104,12 +123,12 @@ const LayoutDesigner = () => {
     // Polygon Shapes
     { type: 'triangle', label: 'Triangle', icon: '▲', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     { type: 'hexagon', label: 'Hexagon', icon: '⬢', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
-    { type: 'pentagon', label: 'Pentagon', icon: '⬟', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
+    // { type: 'pentagon', label: 'Pentagon', icon: '⬟', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     { type: 'octagon', label: 'Octagon', icon: '⬢', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
     
     // Special Shapes
     { type: 'star', label: 'Star', icon: '★', defaultWidth: 80, defaultHeight: 80, color: '#9ca3af' },
-    { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
+    // { type: 'arc', label: 'Arc', icon: '◡', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
     
     // Lines and Dividers
     { type: 'rectangle', label: 'Line', icon: '━', defaultWidth: 100, defaultHeight: 2, color: '#9ca3af' },
@@ -152,7 +171,7 @@ const LayoutDesigner = () => {
   }, [customElementsFilter]);
 
   // Add custom element from selected elements
-  const addCustomElementFromSelection = useCallback(async (name, description) => {
+  const addCustomElementFromSelection = useCallback(async (name) => {
     // Get elements to save - could be multiple selection or single grouped element
     const elementsToSave = selectedIds.length > 0 ? selectedIds : (selectedId ? [selectedId] : []);
     
@@ -173,7 +192,6 @@ const LayoutDesigner = () => {
 
     const elementData = {
       name,
-      description,
       element_data: {
         type: 'group',
         elements: selectedElements,
@@ -612,6 +630,11 @@ const LayoutDesigner = () => {
     setLayoutElements(prev => [...prev, newElement]);
     setHasUnsavedChanges(true);
     
+    // Auto-select the newly added element
+    setSelectedId(newElement.id);
+    setSelectedIds([]);
+    setIsMultiSelect(false);
+    
     // Clear any persistent border control states when adding new elements
     setSelectedBorderWidth(0);
     setSelectedBorderColor(null);
@@ -621,6 +644,13 @@ const LayoutDesigner = () => {
   };
 
   const handleSelect = (id, event) => {
+    console.log('=== ELEMENT SELECTION DEBUG ===');
+    console.log('Selecting element ID:', id);
+    console.log('Event:', event);
+    console.log('Current selectedId:', selectedId);
+    console.log('Current isMultiSelect:', isMultiSelect);
+    console.log('Current selectedIds:', selectedIds);
+    
     const isShift = event?.shiftKey;
     
     if (isShift) {
@@ -1656,6 +1686,223 @@ const LayoutDesigner = () => {
     setHasUnsavedChanges(true);
   }, [selectedId, layoutElements]);
 
+  // Element Duplication Functions
+  
+  // Generate label text based on configuration (numbers only)
+  const generateLabel = useCallback((index, config) => {
+    const { startValue, endValue, increment, duplicateCount } = config;
+    
+    // Calculate actual count needed
+    const actualCount = parseInt(duplicateCount) || 1;
+    const start = parseInt(startValue) || 1;
+    const end = parseInt(endValue) || start + actualCount - 1;
+    const totalRange = Math.abs(end - start) + 1;
+    
+    // Normal sequential labeling when count >= range
+    if (actualCount >= totalRange) {
+      return String(start + (index * increment));
+    }
+    
+    // When count < total range, create a sequence like: 1, 2, 3, ..., 17, 18, 19, 20
+    if (actualCount <= 3) {
+      // For very small counts, just show sequential from start
+      return String(start + (index * increment));
+    }
+    
+    // Calculate how many numbers to show at start and end
+    const numbersAtStart = Math.ceil((actualCount - 1) / 2); // First half (excluding ...)
+    const numbersAtEnd = actualCount - numbersAtStart - 1;   // Last half (excluding ...)
+    const ellipsisIndex = numbersAtStart;                   // Position of ...
+    
+    if (index < numbersAtStart) {
+      // Show first few numbers: 1, 2, 3, 4
+      return String(start + (index * increment));
+    } else if (index === ellipsisIndex) {
+      // Show "..." in the middle
+      return '...';
+    } else {
+      // Show last few numbers: 17, 18, 19, 20
+      const endPosition = index - ellipsisIndex - 1; // Position within end numbers (0-based)
+      return String(end - ((numbersAtEnd - 1 - endPosition) * increment));
+    }
+  }, []);
+
+  // Calculate position based on direction and gap
+  const calculateDuplicatePosition = useCallback((originalElement, index, config) => {
+    const { direction, gap } = config;
+    let deltaX = 0;
+    let deltaY = 0;
+    
+    switch (direction) {
+      case 'right':
+        deltaX = (originalElement.width + gap) * (index + 1);
+        break;
+      case 'left':
+        deltaX = -(originalElement.width + gap) * (index + 1);
+        break;
+      case 'down':
+        deltaY = (originalElement.height + gap) * (index + 1);
+        break;
+      case 'up':
+        deltaY = -(originalElement.height + gap) * (index + 1);
+        break;
+    }
+    
+    return {
+      x: originalElement.x + deltaX,
+      y: originalElement.y + deltaY,
+    };
+  }, []);
+
+  // Open duplication modal
+  const openDuplicationModal = useCallback(() => {
+    // Check if any element is actually selected
+    const hasSelection = selectedId || (isMultiSelect && selectedIds.length > 0);
+
+    if (!hasSelection) {
+      console.log('❌ No elements selected - showing alert');
+      alert('Please select an element to duplicate. Click on an element first, then click Duplicate.');
+      return;
+    }
+
+    setShowDuplicationModal(true);
+  }, [selectedId, isMultiSelect, selectedIds, layoutElements]);
+
+  // Apply duplication
+  const applyDuplication = useCallback(() => {
+    console.log('applyDuplication called', { selectedId, isMultiSelect, selectedIds, duplicationConfig });
+    
+    if (!selectedId && (!isMultiSelect || selectedIds.length === 0)) {
+      console.log('No elements selected for duplication');
+      return;
+    }
+    
+    // Get elements to duplicate
+    const elementsToDuplicate = selectedId 
+      ? [layoutElements.find(el => el.id === selectedId)]
+      : layoutElements.filter(el => selectedIds.includes(el.id));
+    
+    
+    if (elementsToDuplicate.length === 0 || elementsToDuplicate.some(el => !el)) {
+      console.log('No valid elements found for duplication');
+      return;
+    }
+    
+    const { duplicateCount } = duplicationConfig;
+    const newElements = [];
+    const modifiedElements = [];
+        
+    // Calculate all positions first to determine if resizing is needed
+    const allPositions = [];
+    elementsToDuplicate.forEach((originalElement) => {
+      for (let i = 0; i < duplicateCount; i++) {
+        const newPosition = calculateDuplicatePosition(originalElement, i, duplicationConfig);
+        allPositions.push({
+          x: newPosition.x,
+          y: newPosition.y,
+          width: originalElement.width,
+          height: originalElement.height
+        });
+      }
+    });
+    
+    // Check if elements exceed page boundaries
+    const maxX = Math.max(...allPositions.map(pos => pos.x + pos.width));
+    const maxY = Math.max(...allPositions.map(pos => pos.y + pos.height));
+    const currentPageWidth = currentPreset.width;
+    const currentPageHeight = currentPreset.height;
+    
+    // Calculate scale factor if needed
+    let scaleFactor = 1;
+    if (maxX > currentPageWidth || maxY > currentPageHeight) {
+      const scaleX = currentPageWidth / maxX;
+      const scaleY = currentPageHeight / maxY;
+      scaleFactor = Math.min(scaleX, scaleY, 1) * 0.9; // 90% to leave some margin
+    }
+    
+    // Create duplicated elements (including original)
+    for (let i = 0; i < duplicateCount; i++) {
+      const label = generateLabel(i, duplicationConfig);
+      
+      elementsToDuplicate.forEach((originalElement) => {
+        const newPosition = calculateDuplicatePosition(originalElement, i, duplicationConfig);
+        console.log('New position for element', originalElement.id, ':', newPosition);
+        
+        // Apply scaling if needed
+        const scaledWidth = originalElement.width * scaleFactor;
+        const scaledHeight = originalElement.height * scaleFactor;
+        const scaledX = newPosition.x * scaleFactor;
+        const scaledY = newPosition.y * scaleFactor;
+        
+        if (i === 0) {
+          // Modify the original element to display the number as text on it
+          const modifiedElement = {
+            ...originalElement,
+            x: scaledX,
+            y: scaledY,
+            width: scaledWidth,
+            height: scaledHeight,
+            text: label, // Add the number as text content displayed on the element
+            fontSize: originalElement.fontSize || 16,
+          };
+          
+          modifiedElements.push(modifiedElement);
+          console.log('Modified original element with text:', modifiedElement);
+        } else {
+          // Create new duplicated elements keeping original type but adding number text
+          const duplicatedElement = {
+            ...originalElement,
+            id: `${originalElement.id}_duplicate_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+            x: scaledX,
+            y: scaledY,
+            width: scaledWidth,
+            height: scaledHeight,
+            text: label, // Add the number as text content displayed on the element
+            fontSize: originalElement.fontSize || 16,
+          };
+          
+          console.log('Created duplicated element with text:', duplicatedElement);
+          newElements.push(duplicatedElement);
+        }
+      });
+    }
+    // Update layout elements - replace originals and add new ones
+    setLayoutElements(prev => {
+      // Remove original elements and add modified + new elements
+      const elementsToRemove = elementsToDuplicate.map(el => el.id);
+      const filtered = prev.filter(el => !elementsToRemove.includes(el.id));
+      const updated = [...filtered, ...modifiedElements, ...newElements];
+      console.log('Updated layout elements:', updated);
+      return updated;
+    });
+    setHasUnsavedChanges(true);
+    // Close modal
+    setShowDuplicationModal(false);
+    // Group all duplicated elements (select them all)
+    const allElementIds = [...modifiedElements.map(el => el.id), ...newElements.map(el => el.id)];
+    if (allElementIds.length > 1) {
+      setSelectedIds(allElementIds);
+      setSelectedId(null);
+      setIsMultiSelect(true);
+      console.log('Grouped duplicated elements:', allElementIds);
+    } else if (allElementIds.length === 1) {
+      setSelectedId(allElementIds[0]);
+      setSelectedIds([]);
+      setIsMultiSelect(false);
+    }
+    
+    console.log('Duplication completed');
+  }, [selectedId, isMultiSelect, selectedIds, layoutElements, duplicationConfig, generateLabel, calculateDuplicatePosition, currentPreset]);
+
+  // Cancel duplication
+  const cancelDuplication = useCallback(() => {
+    setShowDuplicationModal(false);
+  }, []);
+
+  // Update duplication config
+  const updateDuplicationConfig = useCallback((updates) => {
+    setDuplicationConfig(prev => ({ ...prev, ...updates }));
+  }, []);
 
 
   const handlePageSizeChange = useCallback((preset) => {
@@ -1840,6 +2087,10 @@ const LayoutDesigner = () => {
       if (showStyleControls && !event.target.closest('[data-style-dropdown]')) {
         setShowStyleControls(false);
       }
+      // Check if click is outside layer dropdown
+      if (showLayerDropdown && !event.target.closest('[data-layer-dropdown]')) {
+        setShowLayerDropdown(false);
+      }
       // Check if click is outside page size dropdown
       if (showPageSizeControls && !event.target.closest('[data-pagesize-dropdown]')) {
         setShowPageSizeControls(false);
@@ -1852,7 +2103,7 @@ const LayoutDesigner = () => {
 
     document.addEventListener('mousedown', handleClickOutside);
     return () => document.removeEventListener('mousedown', handleClickOutside);
-  }, [showExportDropdown, showStyleControls, showPageSizeControls]);
+  }, [showExportDropdown, showStyleControls, showLayerDropdown, showPageSizeControls]);
 
   const saveLayout = async () => {
     if (!layoutTitle.trim()) {
@@ -2429,6 +2680,7 @@ const LayoutDesigner = () => {
       onClick: (e) => handleSelect(element.id, e.evt),
       onTap: (e) => handleSelect(element.id, e.evt),
       rotation: element.rotation || 0,
+      opacity: 1,
     };
 
     let shape;
@@ -3133,9 +3385,6 @@ const LayoutDesigner = () => {
           >
             ← Back to Event
           </button>
-          <h2 style={styles.eventTitle}>
-            {currentEvent.title} - Layout
-          </h2>
         </div>
         
         <div style={styles.toolbarRight}>
@@ -3152,128 +3401,12 @@ const LayoutDesigner = () => {
               style={{
                 ...styles.titleInput,
                 borderColor: hasUnsavedChanges ? '#f59e0b' : '#d1d5db',
-                backgroundColor: hasUnsavedChanges ? '#fffde0ff' : 'white'
+                backgroundColor:'white'
               }}
               autoComplete="off"
             />
           )}
 
-          {/* Page Size Controls - Hide when objects are selected */}
-          {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
-            <div style={{ position: 'relative', display: 'inline-block' }} data-pagesize-dropdown>
-              <button 
-                onClick={() => setShowPageSizeControls(!showPageSizeControls)}
-                className="btn btn-small"
-                title="Adjust page size"
-                style={{
-                  backgroundColor: showPageSizeControls ? '#3b82f6' : '#f3f4f6',
-                  color: showPageSizeControls ? 'white' : '#374151',
-                  border: `1px solid ${showPageSizeControls ? '#2563eb' : '#d1d5db'}`,
-                  display: 'flex',
-                  alignItems: 'center',
-                  gap: '4px',
-                  padding: '6px 12px',
-                  borderRadius: '6px',
-                  cursor: 'pointer',
-                  fontSize: '12px',
-                  transition: 'all 0.2s ease',
-                  height: '26px'
-                }}
-              >
-                📐 Page Size
-                {/* 📐 {pageSize.width} × {pageSize.height} */}
-              </button>
-
-              {showPageSizeControls && (
-                <div style={{
-                  position: 'absolute',
-                  top: '100%',
-                  right: 0,
-                  backgroundColor: 'white',
-                  border: '1px solid #d1d5db',
-                  borderRadius: '8px',
-                  boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
-                  zIndex: 1000,
-                  minWidth: '280px',
-                  padding: '12px'
-                }}>
-                  <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: '#374151' }}>
-                    Page Size
-                  </div>
-                  
-                  {/* Preset Selection */}
-                  <div style={{ marginBottom: '12px' }}>
-                    <select
-                      value={pageSizePreset}
-                      onChange={(e) => handlePageSizeChange(e.target.value)}
-                      style={{
-                        width: '100%',
-                        padding: '6px 8px',
-                        borderRadius: '4px',
-                        border: '1px solid #d1d5db',
-                        fontSize: '12px'
-                      }}
-                    >
-                      <option value="custom">Custom</option>
-                      {Object.entries(pageSizePresets).map(([key, preset]) => {
-                        if (key === 'custom') return null;
-                        return (
-                          <option key={key} value={key}>
-                            {preset.label} ({preset.width} × {preset.height})
-                          </option>
-                        );
-                      })}
-                    </select>
-                  </div>
-
-                  {/* Custom Dimensions */}
-                  {pageSizePreset === 'custom' && (
-                    <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
-                          Width
-                        </label>
-                        <input
-                          type="number"
-                          min="200"
-                          max="3000"
-                          value={pageSize.width}
-                          onChange={(e) => handleCustomPageSize(e.target.value, pageSize.height)}
-                          style={{
-                            width: '100%',
-                            padding: '4px 6px',
-                            borderRadius: '4px',
-                            border: '1px solid #d1d5db',
-                            fontSize: '12px'
-                          }}
-                        />
-                      </div>
-                      <div style={{ padding: '0 4px', color: '#6b7280', fontSize: '12px' }}>×</div>
-                      <div style={{ flex: 1 }}>
-                        <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
-                          Height
-                        </label>
-                        <input
-                          type="number"
-                          min="200"
-                          max="3000"
-                          value={pageSize.height}
-                          onChange={(e) => handleCustomPageSize(pageSize.width, e.target.value)}
-                          style={{
-                            width: '100%',
-                            padding: '4px 6px',
-                            borderRadius: '4px',
-                            border: '1px solid #d1d5db',
-                            fontSize: '12px'
-                          }}
-                        />
-                      </div>
-                    </div>
-                  )}
-                </div>
-              )}
-            </div>
-          )}
           {!(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <>
               <button 
@@ -3283,6 +3416,121 @@ const LayoutDesigner = () => {
               >
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
+              
+              {/* Page Size Controls */}
+              <div style={{ position: 'relative', display: 'inline-block' }} data-pagesize-dropdown>
+                <button 
+                  onClick={() => setShowPageSizeControls(!showPageSizeControls)}
+                  className="btn btn-small"
+                  title="Adjust page size"
+                  style={{
+                    backgroundColor: showPageSizeControls ? '#3b82f6' : '#f3f4f6',
+                    color: showPageSizeControls ? 'white' : '#374151',
+                    border: `1px solid ${showPageSizeControls ? '#2563eb' : '#d1d5db'}`,
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px',
+                    padding: '6px 12px',
+                    borderRadius: '6px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    transition: 'all 0.2s ease',
+                    height: '26px'
+                  }}
+                >
+                  📐 Page Size
+                  {/* 📐 {pageSize.width} × {pageSize.height} */}
+                </button>
+
+                {showPageSizeControls && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '8px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '280px',
+                    padding: '12px'
+                  }}>
+                    <div style={{ marginBottom: '8px', fontWeight: 'bold', fontSize: '13px', color: '#374151' }}>
+                      Page Size
+                    </div>
+                    
+                    {/* Preset Selection */}
+                    <div style={{ marginBottom: '12px' }}>
+                      <select
+                        value={pageSizePreset}
+                        onChange={(e) => handlePageSizeChange(e.target.value)}
+                        style={{
+                          width: '100%',
+                          padding: '6px 8px',
+                          borderRadius: '4px',
+                          border: '1px solid #d1d5db',
+                          fontSize: '12px'
+                        }}
+                      >
+                        <option value="custom">Custom</option>
+                        {Object.entries(pageSizePresets).map(([key, preset]) => {
+                          if (key === 'custom') return null;
+                          return (
+                            <option key={key} value={key}>
+                              {preset.label} ({preset.width} × {preset.height})
+                            </option>
+                          );
+                        })}
+                      </select>
+                    </div>
+
+                    {/* Custom Dimensions */}
+                    {pageSizePreset === 'custom' && (
+                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                            Width
+                          </label>
+                          <input
+                            type="number"
+                            min="200"
+                            max="3000"
+                            value={pageSize.width}
+                            onChange={(e) => handleCustomPageSize(e.target.value, pageSize.height)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid #d1d5db',
+                              fontSize: '12px'
+                            }}
+                          />
+                        </div>
+                        <div style={{ padding: '0 4px', color: '#6b7280', fontSize: '12px' }}>×</div>
+                        <div style={{ flex: 1 }}>
+                          <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                            Height
+                          </label>
+                          <input
+                            type="number"
+                            min="200"
+                            max="3000"
+                            value={pageSize.height}
+                            onChange={(e) => handleCustomPageSize(pageSize.width, e.target.value)}
+                            style={{
+                              width: '100%',
+                              padding: '4px 6px',
+                              borderRadius: '4px',
+                              border: '1px solid #d1d5db',
+                              fontSize: '12px'
+                            }}
+                          />
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                )}
+              </div>
               
               {/* Export Dropdown */}
               <div style={{ position: 'relative', display: 'inline-block' }} data-export-dropdown data-prevent-deselect="true">
@@ -3359,6 +3607,17 @@ const LayoutDesigner = () => {
                 )}
               </div>
               
+              {/* Paste button - always available when clipboard has content */}
+              {clipboard.length > 0 && (
+                <button 
+                  onClick={pasteElements}
+                  className="btn btn-info btn-small"
+                  title="Paste elements (Ctrl+V)"
+                >
+                  Paste
+                </button>
+              )}
+              
               <button 
                 onClick={clearLayout}
                 className="btn btn-danger btn-small"
@@ -3367,9 +3626,10 @@ const LayoutDesigner = () => {
               </button>
             </>
           )}
-          
+
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
-            <>
+            <div data-prevent-deselect="true" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              {console.log('CONTROLS VISIBLE:', { selectedId, isMultiSelect, selectedIdsLength: selectedIds.length })}
               {/* Combined Style Controls Dropdown */}
               <div style={{ position: 'relative', display: 'inline-block' }} data-style-dropdown data-prevent-deselect="true">
                 <button 
@@ -3575,36 +3835,141 @@ const LayoutDesigner = () => {
                 )}
               </div>
               
-              {/* Layer management buttons */}
-              <button 
-                onClick={bringToFront}
-                className="btn btn-info btn-small"
-                title="Bring to front - Move selected objects to the top layer"
-              >
-                ⬆️ Most Front
-              </button>
-              <button 
-                onClick={sendToBack}
-                className="btn btn-info btn-small"
-                title="Send to back - Move selected objects to the bottom layer"
-              >
-                ⬇️ Most Back
-              </button>
+              {/* Layer management dropdown */}
+              <div style={{ position: 'relative', display: 'inline-block' }} data-layer-dropdown data-prevent-deselect="true">
+                <button 
+                  onClick={() => setShowLayerDropdown(!showLayerDropdown)}
+                  className="btn btn-info btn-small"
+                  title="Layer management - Arrange element layers"
+                  style={{
+                    backgroundColor: showLayerDropdown ? '#3b82f6' : '',
+                    color: showLayerDropdown ? 'white' : '',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '4px'
+                  }}
+                >
+                  <i className="fa-solid fa-layer-group"></i> Layers ▾
+                </button>
+                
+                {showLayerDropdown && (
+                  <div style={{
+                    position: 'absolute',
+                    top: '100%',
+                    right: 0,
+                    backgroundColor: 'white',
+                    border: '1px solid #d1d5db',
+                    borderRadius: '6px',
+                    boxShadow: '0 4px 12px rgba(0, 0, 0, 0.15)',
+                    zIndex: 1000,
+                    minWidth: '50px',
+                    marginTop: '4px'
+                  }}>
+                    <button
+                      onClick={() => {
+                        bringToFront();
+                        setShowLayerDropdown(false);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        borderRadius: '6px 6px 0 0'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      title="Bring to front - Move selected objects to the top layer"
+                    >
+                      <Icon path={mdiArrangeBringToFront} size={0.7} /> Most Front
+                    </button>
+                    <button
+                      onClick={() => {
+                        bringForward();
+                        setShowLayerDropdown(false);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      title="Bring forward - Move selected objects up one layer (Ctrl+])"
+                    >
+                      <Icon path={mdiArrangeBringForward} size={0.7} /> Forward
+                    </button>
+                    <button
+                      onClick={() => {
+                        sendBackward();
+                        setShowLayerDropdown(false);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      title="Send backward - Move selected objects down one layer (Ctrl+[)"
+                    >
+                      <Icon path={mdiArrangeSendBackward} size={0.7} /> Backward
+                    </button>
+                    <button
+                      onClick={() => {
+                        sendToBack();
+                        setShowLayerDropdown(false);
+                      }}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        gap: '8px',
+                        width: '100%',
+                        padding: '8px 12px',
+                        border: 'none',
+                        backgroundColor: 'transparent',
+                        textAlign: 'left',
+                        cursor: 'pointer',
+                        fontSize: '14px',
+                        borderRadius: '0 0 6px 6px'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#f3f4f6'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = 'transparent'}
+                      title="Send to back - Move selected objects to the bottom layer"
+                    >
+                      <Icon path={mdiArrangeSendToBack} size={0.7} /> Most Back
+                    </button>
+                  </div>
+                )}
+              </div>
               
-              {/* Incremental layer movement buttons */}
               <button 
-                onClick={bringForward}
-                className="btn btn-info btn-small"
-                title="Bring forward - Move selected objects up one layer (Ctrl+])"
+                onClick={openDuplicationModal}
+                className="btn btn-success btn-small"
+                title="Duplicate element with numbering"
+                data-prevent-deselect="true"
               >
-                ↗️ Forward
-              </button>
-              <button 
-                onClick={sendBackward}
-                className="btn btn-info btn-small"
-                title="Send backward - Move selected objects down one layer (Ctrl+[)"
-              >
-                ↙️ Backward
+                Auto-Number
               </button>
               
               <button 
@@ -3621,22 +3986,22 @@ const LayoutDesigner = () => {
               >
                 Copy
               </button>
+              {clipboard.length > 0 && (
+                <button 
+                  onClick={pasteElements}
+                  className="btn btn-info btn-small"
+                  title="Paste elements (Ctrl+V)"
+                >
+                  Paste
+                </button>
+              )}
               <button 
                 onClick={deleteElement}
                 className="btn btn-danger btn-small"
               >
                 Delete
               </button>
-            </>
-          )}
-          {clipboard.length > 0 && (
-            <button 
-              onClick={pasteElements}
-              className="btn btn-info btn-small"
-              title="Paste elements (Ctrl+V)"
-            >
-              Paste
-            </button>
+            </div>
           )}
           {isMultiSelect && selectedIds.length > 1 && (
             <>
@@ -3803,13 +4168,12 @@ const LayoutDesigner = () => {
                 ) : customElements.length > 0 ? (
                   <div style={styles.customElementGrid}>
                     {customElements.map((element) => {
-                      console.log('Rendering custom element item:', element.name, 'ID:', element.element_id);
                       return (
                         <div
                           key={element.element_id}
                           style={styles.customElementItem}
                           onClick={() => addCustomElementToLayout(element)}
-                          title={`${element.name}${element.description ? ` - ${element.description}` : ''}`}
+                          title={element.name}
                         >
                         {element.thumbnail ? (
                           <img 
@@ -3850,14 +4214,10 @@ const LayoutDesigner = () => {
                               {element.element_data && element.element_data.elements && element.element_data.elements.length > 0 ? (
                                 (() => {
                                   const elements = element.element_data.elements;
-                                  console.log('🖼️ Rendering thumbnail for:', element.name, 'Elements:', elements.length);
-                                  console.log('🔍 Elements details:', elements.map(el => ({ type: el.type, borderWidth: el.borderWidth, borderColor: el.borderColor })));
                                   
                                   // Handle merged elements specially
                                   if (elements.length === 1 && elements[0].type === 'merged' && elements[0].children) {
-                                    console.log('📦 Merged element detected, using children');
                                     const mergedChildren = elements[0].children;
-                                    console.log('🔍 Merged children details:', mergedChildren.map(child => ({ type: child.type, borderWidth: child.borderWidth, borderColor: child.borderColor })));
                                     
                                     // Calculate bounds for merged children
                                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -3891,9 +4251,7 @@ const LayoutDesigner = () => {
                                     const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
                                     const offsetX = (60 - boundingWidth * scale) / 2;
                                     const offsetY = (60 - boundingHeight * scale) / 2;
-                                    
-                                    console.log('📐 Merged bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
-                                    
+                                                                        
                                     return mergedChildren.map((child, idx) => {
                                       // For centered shapes, adjust positioning
                                       let scaledX, scaledY;
@@ -4190,7 +4548,7 @@ const LayoutDesigner = () => {
                 style={styles.newLayoutButton}
                 title="Create new layout"
               >
-                + New
+                +
               </button>
             </div>
             
@@ -4208,14 +4566,17 @@ const LayoutDesigner = () => {
                       {layout.title}
                     </span>
                     <button
-                      style={styles.deleteButton}
+                      style={{
+                            ...styles.deleteElementButton,
+                            opacity: 1 // Always show for now, CSS hover not working in React inline styles
+                          }}
                       onClick={(e) => {
                         e.stopPropagation();
                         deleteLayout(layout.id, layout.title);
                       }}
                       title="Delete layout"
                     >
-                      🗑️
+                      ×
                     </button>
                   </div>
                 ))}
@@ -4734,17 +5095,139 @@ const LayoutDesigner = () => {
         </div>
       )}
 
+      {/* Element Duplication Modal */}
+      {showDuplicationModal && (
+        <div data-prevent-deselect="true" style={{...styles.modal, zIndex: 9999}}>
+          <div style={{...styles.modalContent, minWidth: '400px', maxWidth: '500px'}}>
+            <h3 style={{margin: '0 0 20px 0', textAlign: 'center', color: '#1f2937'}}>
+              Duplicate Elements with Numbering
+            </h3>
+            
+            <div style={{marginBottom: '20px'}}>
+              {/* Configuration */}
+              <div>
+                
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '10px'}}>
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      Start:
+                    </label>
+                    <input 
+                      type="number"
+                      value={duplicationConfig.startValue}
+                      onChange={(e) => updateDuplicationConfig({startValue: e.target.value})}
+                      style={styles.input}
+                      placeholder="1"
+                      min="1"
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      End:
+                    </label>
+                    <input 
+                      type="number"
+                      value={duplicationConfig.endValue}
+                      onChange={(e) => updateDuplicationConfig({endValue: e.target.value})}
+                      style={styles.input}
+                      placeholder="10"
+                      min="1"
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      Increment:
+                    </label>
+                    <input 
+                      type="number"
+                      value={duplicationConfig.increment}
+                      onChange={(e) => updateDuplicationConfig({increment: parseInt(e.target.value) || 1})}
+                      style={styles.input}
+                      min="1"
+                    />
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      Count:
+                    </label>
+                    <input 
+                      type="number"
+                      value={duplicationConfig.duplicateCount}
+                      onChange={(e) => updateDuplicationConfig({duplicateCount: parseInt(e.target.value) || 1})}
+                      style={styles.input}
+                      min="1"
+                      max="9999"
+                    />
+                  </div>
+                </div>
+                
+                <div style={{display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px'}}>
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      Direction:
+                    </label>
+                    <select 
+                      value={duplicationConfig.direction}
+                      onChange={(e) => updateDuplicationConfig({direction: e.target.value})}
+                      style={styles.input}
+                    >
+                      <option value="right">Left → Right</option>
+                      <option value="left">Right → Left</option>
+                      <option value="down">Top → Bottom</option>
+                      <option value="up">Bottom → Top</option>
+                    </select>
+                  </div>
+                  
+                  <div style={styles.formGroup}>
+                    <label style={{display: 'block', marginBottom: '5px', fontWeight: '600'}}>
+                      Gap (pixels):
+                    </label>
+                    <input 
+                      type="number"
+                      value={duplicationConfig.gap}
+                      onChange={(e) => updateDuplicationConfig({gap: parseInt(e.target.value) || 0})}
+                      style={styles.input}
+                      min="0"
+                      max="200"
+                    />
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <div style={styles.formActions}>
+              <button 
+                type="button"
+                onClick={cancelDuplication}
+                style={styles.cancelButton}
+              >
+                Cancel
+              </button>
+              <button 
+                type="button"
+                onClick={applyDuplication}
+                style={{...styles.saveButton, backgroundColor: '#10b981'}}
+              >
+                Apply
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Save Element Dialog */}
       {showSaveElementDialog && (
         <div data-prevent-deselect="true" style={styles.modal}>
           <div style={styles.modalContent}>
-            <h3>Save Custom Element</h3>
+            <h3 style={{textAlign: 'center', marginBottom: '1rem'}}>Save Custom Element</h3>
             <form onSubmit={async (e) => {
               e.preventDefault();
               const formData = new FormData(e.target);
               const name = formData.get('name');
-              const description = formData.get('description');
-              const success = await addCustomElementFromSelection(name, description);
+              const success = await addCustomElementFromSelection(name);
               if (success) {
                 setShowSaveElementDialog(false);
                 setSelectedIds([]);
@@ -4761,15 +5244,6 @@ const LayoutDesigner = () => {
                   placeholder="Enter element name..."
                 />
               </div>
-              <div style={styles.formGroup}>
-                <label>Description</label>
-                <textarea 
-                  name="description" 
-                  style={styles.textarea}
-                  placeholder="Optional description..."
-                  rows="3"
-                />
-              </div>
 
               <div style={styles.formActions}>
                 <button 
@@ -4783,7 +5257,7 @@ const LayoutDesigner = () => {
                   type="submit" 
                   style={styles.saveButton}
                 >
-                  Save Element
+                  Save
                 </button>
               </div>
             </form>
@@ -4893,10 +5367,10 @@ const styles = {
     marginBottom: '1rem',
   },
   newLayoutButton: {
-    background: '#3b82f6',
-    color: 'white',
+    backgroundColor: 'transparent',
+    color: '#6b7280',
     border: 'none',
-    padding: '0.5rem 0.75rem',
+    padding: '0.5rem',
     borderRadius: '6px',
     fontSize: '0.8rem',
     cursor: 'pointer',
@@ -4955,6 +5429,7 @@ const styles = {
     display: 'flex',
     justifyContent: 'space-between',
     alignItems: 'center',
+    position: 'relative',
   },
   layoutTitle: {
     cursor: 'pointer',
@@ -5284,8 +5759,8 @@ const styles = {
     color: 'white',
     border: 'none',
     borderRadius: '4px',
-    padding: '6px 12px',
-    fontSize: '14px',
+    padding: '4px 12px',
+    fontSize: '13px',
     cursor: 'pointer',
     transition: 'all 0.2s ease',
     fontWeight: '600',
@@ -5374,7 +5849,7 @@ const styles = {
     display: 'flex',
     flexDirection: 'column',
     gap: '8px',
-    maxHeight: '300px',
+    maxHeight: '250px',
     overflowY: 'auto',
   },
   customElementItem: {
