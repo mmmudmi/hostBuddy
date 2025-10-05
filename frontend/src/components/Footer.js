@@ -4,7 +4,7 @@ const Footer = () => {
   return (
     <footer style={styles.footer}>
       <div className="container">
-        <div style={styles.footerContent}>
+        {/* <div style={styles.footerContent}>
           <div style={styles.footerSection}>
             <h3 style={styles.footerTitle}>Host Buddy</h3>
             <p style={styles.footerText}>
@@ -41,11 +41,11 @@ const Footer = () => {
               <li>Instagram</li>
             </ul>
           </div>
-        </div>
+        </div> */}
         
         <div style={styles.footerBottom}>
           <p style={styles.copyright}>
-            © 2025 Host Buddy. All rights reserved.
+            Pearploy Chaicharoensin
           </p>
         </div>
       </div>

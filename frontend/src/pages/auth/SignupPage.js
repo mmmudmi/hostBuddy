@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { registerUser, clearError } from '../../store/authSlice';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import AnimatedBackground from '../../components/AnimatedBackground';
 
 const SignupPage = () => {
   const [formData, setFormData] = useState({
@@ -96,9 +97,10 @@ const SignupPage = () => {
   }
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
-        <h1 className="auth-title">Create Account</h1>
+    <div className="auth-container background" style={{ position: 'relative', minHeight: '100vh' }}>
+      <AnimatedBackground />
+      <div className="auth-card" style={{ position: 'relative', zIndex: 10 }}>
+        {/* <h1 className="auth-title">Create Account</h1> */}
         
         {error && (
           <div style={styles.errorMessage}>
@@ -109,7 +111,7 @@ const SignupPage = () => {
         <form onSubmit={handleSubmit}>
           <div className="form-group">
             <label htmlFor="full_name" className="form-label">
-              Full Name
+              Name
             </label>
             <input
               type="text"
@@ -119,7 +121,7 @@ const SignupPage = () => {
               onChange={handleChange}
               className="form-input"
               required
-              placeholder="Enter your full name"
+              placeholder="Enter your name"
               autoComplete="name"
             />
             {formErrors.full_name && (

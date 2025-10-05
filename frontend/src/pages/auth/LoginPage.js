@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { loginUser, clearError } from '../../store/authSlice';
 import LoadingSpinner from '../../components/LoadingSpinner';
+import AnimatedBackground from '../../components/AnimatedBackground';
 
 const LoginPage = () => {
   const [formData, setFormData] = useState({
@@ -54,10 +55,10 @@ const LoginPage = () => {
   }
 
   return (
-    <div className="auth-container">
-      <div className="auth-card">
+    <div className="auth-container background" style={{ position: 'relative', minHeight: '100vh' }}>
+      <AnimatedBackground />
+      <div className="auth-card" style={{ position: 'relative', zIndex: 10 }}>
         <h1 className="auth-title">Welcome Back</h1>
-        
         {error && (
           <div style={styles.errorMessage}>
             {error}

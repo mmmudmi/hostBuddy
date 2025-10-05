@@ -10,10 +10,17 @@
 
 /* Hero Section */
 .hero {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #72f2d2 20%, #6600FF 100%);
   color: white;
   padding: 100px 0;
   text-align: center;
+  position: relative;
+  overflow: hidden;
+  min-height: 60vh;
+}
+
+.background {
+  background: linear-gradient(135deg, #72f2d2 20%, #6600FF 100%);
 }
 
 .hero h1 {
@@ -69,7 +76,7 @@
 .feature-icon {
   width: 64px;
   height: 64px;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #72f2d2 0%, #6600FF 100%);
   border-radius: 50%;
   display: flex;
   align-items: center;
@@ -102,7 +109,7 @@
 
 .auth-card {
   width: 100%;
-  max-width: 400px;
+  max-width: 450px;
   background: white;
   padding: 2rem;
   border-radius: 12px;
@@ -123,7 +130,7 @@
 }
 
 .auth-link a {
-  color: #3b82f6;
+  color: #6600FF;
   text-decoration: none;
   font-weight: 600;
 }
@@ -414,16 +421,22 @@
 }
 
 .btn:hover {
-  transform: translateY(-1px);
+  transform: scale(1.05);
+  transition: all 0.4s;
 }
 
 .btn-primary {
-  background-color: #3b82f6;
+  background-color: #000000;
   color: white;
 }
 
 .btn-primary:hover {
-  background-color: #2563eb;
+  background-color: #161616;
+}
+
+.btn-transparent {
+  background-color: transparent;
+  color: rgb(0, 0, 0);
 }
 
 .btn-secondary {

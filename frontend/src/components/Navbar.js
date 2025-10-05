@@ -16,18 +16,18 @@ const Navbar = () => {
   return (
     <nav style={styles.navbar}>
       <div className="container" style={styles.navContainer}>
-        <Link to="/" style={styles.logo}>
-          Host Buddy
+        <Link to="/">
+          <img src="images/logo.png" alt="Host Buddy Logo" style={{height: '40px', marginRight: '8px'}} />
         </Link>
         
         <div style={styles.navLinks}>
           {isAuthenticated ? (
             <>
-              <Link to="/dashboard" style={styles.navLink}>
+              {/* <Link to="/dashboard" style={styles.navLink}>
                 Dashboard
-              </Link>
+              </Link> */}
               <span style={styles.userInfo}>
-                Welcome, {user?.full_name || user?.email}
+                Welcome, {user?.name}
               </span>
               <button 
                 onClick={handleLogout}
@@ -38,10 +38,10 @@ const Navbar = () => {
             </>
           ) : (
             <>
-              <Link to="/login" style={styles.navLink}>
+              <Link to="/login" className="btn btn-transparent">
                 Login
               </Link>
-              <Link to="/signup" style={{...styles.navLink, ...styles.signupBtn}}>
+              <Link to="/signup" className="btn btn-primary">
                 Sign Up
               </Link>
             </>
@@ -56,7 +56,7 @@ const styles = {
   navbar: {
     background: 'white',
     boxShadow: '0 2px 4px rgba(0,0,0,0.1)',
-    padding: '1rem 0',
+    padding: '0.4rem 0',
     position: 'sticky',
     top: 0,
     zIndex: 1000,
@@ -67,9 +67,7 @@ const styles = {
     alignItems: 'center',
   },
   logo: {
-    fontSize: '1.5rem',
     fontWeight: 'bold',
-    color: '#3b82f6',
     textDecoration: 'none',
   },
   navLinks: {

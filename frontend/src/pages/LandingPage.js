@@ -1,24 +1,31 @@
 import React from 'react';
 import { Link } from 'react-router-dom';
 import Footer from '../components/Footer';
+import AnimatedBackground from '../components/AnimatedBackground';
 
 const LandingPage = () => {
   return (
     <div className="App-main">
       {/* Hero Section */}
-      <section className="hero">
-        <div className="container">
-          <h1>Welcome to Host Buddy</h1>
+      <section className="hero" style={{ position: 'relative', overflow: 'hidden' }}>
+        <AnimatedBackground style={{ zIndex: 1 }} />
+        <div className="container" style={{ position: 'relative', zIndex: 2 }}>
+          <h1>Welcome to</h1>
+          <img 
+            src="gifs/logo_white.gif" 
+            alt="Host Buddy Logo" 
+            style={{
+              height: '150px',
+              padding: '10px'
+            }} 
+          />
           <p>
-            Your ultimate event management platform. Plan, manage, and share 
-            unforgettable events with ease.
+            Your ultimate event management platform. 
           </p>
+          {/* Plan, manage, and share unforgettable events with ease. */}
           <div className="hero-buttons">
             <Link to="/signup" className="btn btn-primary">
               Get Started Free
-            </Link>
-            <Link to="/login" className="btn btn-secondary">
-              Sign In
             </Link>
           </div>
         </div>
@@ -102,7 +109,7 @@ const LandingPage = () => {
         </div>
       </section>
 
-      <Footer />
+      {/* <Footer /> */}
     </div>
   );
 };
