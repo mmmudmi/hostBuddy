@@ -205,3 +205,21 @@ code {
 .error-close-btn:hover {
   opacity: 1 !important;
 }
+
+.backLink {
+  color: rgb(0, 0, 0);
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-decoration: none;
+  /* background-color: #ffffff4e;
+  padding: 0.7rem 1rem;
+  border-radius: 10px;
+  box-shadow: 2px 5px 10px rgba(0,0,0,0.05); */
+  transition: all 0.3s ease;
+}
+
+.backLink:hover {
+  /* background-color: #ffffff; */
+  text-shadow: 2px 5px 10px rgba(0,0,0,0.1);
+  font-size: 0.85rem;
+}

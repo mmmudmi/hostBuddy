@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { useParams, Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
-import { Stage, Layer, Rect, Circle, Text, Transformer, Ellipse, Line, RegularPolygon, Star, Arc, Group, Path } from 'react-konva';
+import { Stage, Layer, Rect, Circle, Text, Transformer, Ellipse, Line, RegularPolygon, Star, Arc, Group, Path, Image } from 'react-konva';
 import { fetchEventById } from '../store/eventSlice';
 import layoutAPI from '../utils/api/layoutAPI';
 import userElementsAPI from '../utils/api/userElementsAPI';
@@ -14,6 +14,80 @@ import {
   mdiArrangeSendBackward, 
   mdiArrangeSendToBack 
 } from '@mdi/js';
+
+// Separate component for rendering images to avoid hooks violations
+const ImageElement = ({ element, shapeProps, onDblClick, onDblTap }) => {
+  const [imageElement, setImageElement] = React.useState(null);
+  const imageRef = React.useRef(null);
+  
+  React.useEffect(() => {
+    if (element.imageData) {
+      const img = new window.Image();
+      img.onload = () => {
+        setImageElement(img);
+      };
+      img.onerror = () => {
+        console.warn('Failed to load image:', element.imageData?.substring(0, 50) + '...');
+        setImageElement(null);
+      };
+      img.src = element.imageData;
+    }
+    
+    return () => {
+      setImageElement(null);
+    };
+  }, [element.imageData]);
+  
+  return imageElement ? (
+    <Image
+      {...shapeProps}
+      ref={imageRef}
+      image={imageElement}
+      onDblClick={onDblClick}
+      onDblTap={onDblTap}
+    />
+  ) : (
+    // Placeholder while image loads - use transparent fill
+    <Rect
+      {...shapeProps}
+      ref={imageRef}
+      fill="transparent"
+      stroke="#d1d5db"
+      strokeWidth={1}
+      dash={[5, 5]} // Dashed border to indicate loading
+    />
+  );
+};
+
+// Separate component for child images in groups
+const ChildImageElement = ({ child, childProps }) => {
+  const [childImageElement, setChildImageElement] = React.useState(null);
+  const childImageRef = React.useRef(null);
+  
+  React.useEffect(() => {
+    if (child.imageData) {
+      const img = new window.Image();
+      img.onload = () => {
+        setChildImageElement(img);
+      };
+      img.onerror = () => {
+        console.warn('Failed to load child image:', child.imageData?.substring(0, 50) + '...');
+        setChildImageElement(null);
+      };
+      img.src = child.imageData;
+    }
+    
+    return () => {
+      setChildImageElement(null);
+    };
+  }, [child.imageData]);
+  
+  return childImageElement ? (
+    <Image {...childProps} ref={childImageRef} image={childImageElement} />
+  ) : (
+    <Rect {...childProps} ref={childImageRef} fill="transparent" stroke="#d1d5db" strokeWidth={1} dash={[5, 5]} />
+  );
+};
 
 const LayoutDesigner = () => {
   const { id } = useParams();
@@ -52,6 +126,7 @@ const LayoutDesigner = () => {
   const [selectedBorderWidth, setSelectedBorderWidth] = useState(0);
   const [selectedBorderColor, setSelectedBorderColor] = useState(null);
   const [selectedColor, setSelectedColor] = useState('#9ca3af');
+  const [selectedTransparency, setSelectedTransparency] = useState(100); // 0-100 percentage
   const [isToggleHovered, setIsToggleHovered] = useState(false);
   const [isCancelHovered, setIsCancelHovered] = useState(false);
   
@@ -86,6 +161,11 @@ const LayoutDesigner = () => {
   const [pageSize, setPageSize] = useState({ width: 800, height: 600 });
   const [pageSizePreset, setPageSizePreset] = useState('custom');
   const [showPageSizeControls, setShowPageSizeControls] = useState(false);
+  
+  // Image handling state
+  const [showImageUpload, setShowImageUpload] = useState(false);
+  const [imageResizeMode, setImageResizeMode] = useState(null); // 'corner' or 'side'
+  const fileInputRef = useRef(null);
   
   // Page size presets - Define early so it can be used by other functions
   const pageSizePresets = {
@@ -135,6 +215,9 @@ const LayoutDesigner = () => {
     
     // Text and Labels
     { type: 'text', label: 'Text', icon: '✎', defaultWidth: 100, defaultHeight: 30, color: '#9ca3af' },
+    
+    // Media
+    { type: 'image', label: 'Image', icon: '🖼️', defaultWidth: 100, defaultHeight: 100, color: '#9ca3af' },
   ];
 
   const loadLayouts = useCallback(async () => {
@@ -607,6 +690,12 @@ const LayoutDesigner = () => {
   }, []);
 
   const addElement = (elementType) => {
+    // Handle image elements specially - trigger file upload
+    if (elementType.type === 'image') {
+      fileInputRef.current?.click();
+      return;
+    }
+    
     // Get optimal position using auto-alignment
     const optimalPosition = getOptimalPlacementPosition();
     
@@ -641,6 +730,89 @@ const LayoutDesigner = () => {
     setSelectedColor('#9ca3af');
     setHoveredBorderWidth(null);
     setHoveredBorderColor(null);
+  };
+
+  // Change element transparency
+  const changeElementTransparency = (transparency) => {
+    const opacity = transparency / 100; // Convert percentage to 0-1 scale
+    
+    if (selectedId) {
+      updateElement(selectedId, { opacity });
+    } else if (isMultiSelect && selectedIds.length > 0) {
+      selectedIds.forEach(id => {
+        updateElement(id, { opacity });
+      });
+    }
+    setHasUnsavedChanges(true);
+  };
+
+  // Image handling functions
+  const handleImageUpload = (event) => {
+    const file = event.target.files[0];
+    if (!file) return;
+
+    // Validate file type
+    if (!file.type.startsWith('image/')) {
+      alert('Please select a valid image file.');
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      const img = new window.Image();
+      img.onload = () => {
+        // Calculate aspect ratio and initial size
+        const aspectRatio = img.width / img.height;
+        let width = 200;
+        let height = 200;
+        
+        // Maintain aspect ratio while fitting within default bounds
+        if (aspectRatio > 1) {
+          height = width / aspectRatio;
+        } else {
+          width = height * aspectRatio;
+        }
+
+        // Get optimal position using auto-alignment
+        const optimalPosition = getOptimalPlacementPosition();
+        
+        const newElement = {
+          id: Date.now().toString(),
+          type: 'image',
+          x: optimalPosition.x,
+          y: optimalPosition.y,
+          width: width,
+          height: height,
+          color: '#9ca3af',
+          label: 'Image',
+          rotation: 0,
+          imageData: e.target.result, // base64 data
+          originalWidth: img.width,
+          originalHeight: img.height,
+          aspectRatio: aspectRatio,
+        };
+        
+        setLayoutElements(prev => [...prev, newElement]);
+        setHasUnsavedChanges(true);
+        
+        // Auto-select the newly added element
+        setSelectedId(newElement.id);
+        setSelectedIds([]);
+        setIsMultiSelect(false);
+        
+        // Clear any persistent border control states
+        setSelectedBorderWidth(0);
+        setSelectedBorderColor(null);
+        setSelectedColor('#9ca3af');
+        setHoveredBorderWidth(null);
+        setHoveredBorderColor(null);
+      };
+      img.src = e.target.result;
+    };
+    reader.readAsDataURL(file);
+    
+    // Reset file input
+    event.target.value = '';
   };
 
   const handleSelect = (id, event) => {
@@ -687,6 +859,7 @@ const LayoutDesigner = () => {
                 setSelectedBorderWidth(selectedElement.borderWidth || 0);
                 setSelectedBorderColor(selectedElement.borderColor || null);
                 setSelectedColor(selectedElement.color || '#9ca3af');
+                setSelectedTransparency(selectedElement.opacity ? Math.round(selectedElement.opacity * 100) : 100);
               }
             }
           } else {
@@ -720,6 +893,7 @@ const LayoutDesigner = () => {
           setSelectedBorderWidth(selectedElement.borderWidth || 0);
           setSelectedBorderColor(selectedElement.borderColor || null);
           setSelectedColor(selectedElement.color || '#9ca3af');
+          setSelectedTransparency(selectedElement.opacity ? Math.round(selectedElement.opacity * 100) : 100);
         }
       }
     } else {
@@ -735,6 +909,7 @@ const LayoutDesigner = () => {
         setSelectedBorderWidth(selectedElement.borderWidth || 0);
         setSelectedBorderColor(selectedElement.borderColor || null);
         setSelectedColor(selectedElement.color || '#9ca3af');
+        setSelectedTransparency(selectedElement.opacity ? Math.round(selectedElement.opacity * 100) : 100);
       }
     }
   };
@@ -749,6 +924,7 @@ const LayoutDesigner = () => {
     setSelectedBorderWidth(0);
     setSelectedBorderColor(null);
     setSelectedColor('#9ca3af');
+    setSelectedTransparency(100);
     setHoveredBorderWidth(null);
     setHoveredBorderColor(null);
     setShowBorderControls(false);
@@ -2627,6 +2803,36 @@ const LayoutDesigner = () => {
           rotation: node.rotation(),
           children: scaledChildren,
         });
+      } else if (element.type === 'image') {
+        // For images, handle corner vs side resizing differently
+        const aspectRatio = element.aspectRatio || 1;
+        let newWidth = Math.max(5, node.width() * scaleX);
+        let newHeight = Math.max(5, node.height() * scaleY);
+        
+        // Simple detection: if only one dimension changed significantly, it's side resize
+        const widthChange = Math.abs(scaleX - 1);
+        const heightChange = Math.abs(scaleY - 1);
+        const changeThreshold = 0.01;
+        
+        const onlyWidthChanged = widthChange > changeThreshold && heightChange <= changeThreshold;
+        const onlyHeightChanged = heightChange > changeThreshold && widthChange <= changeThreshold;
+        const isSideResize = onlyWidthChanged || onlyHeightChanged;
+        
+        if (!isSideResize) {
+          // Corner resize or both dimensions changed: maintain aspect ratio
+          const dominantScale = widthChange > heightChange ? scaleX : scaleY;
+          newWidth = Math.max(5, element.width * dominantScale);
+          newHeight = Math.max(5, element.height * dominantScale);
+        }
+        // For side resize, allow free-form resizing (use original newWidth/newHeight)
+        
+        updateElement(element.id, {
+          x: node.x(),
+          y: node.y(),
+          width: newWidth,
+          height: newHeight,
+          rotation: node.rotation(),
+        });
       } else {
         // For regular elements, use the original logic
         updateElement(element.id, {
@@ -2650,7 +2856,7 @@ const LayoutDesigner = () => {
       y: element.y,
       width: element.width,
       height: element.height,
-      fill: element.color,
+      fill: element.type === 'image' ? undefined : element.color, // Don't set fill for images
       stroke: isSelected 
         ? '#0066cc' 
         : (isInTempGroup 
@@ -2680,7 +2886,7 @@ const LayoutDesigner = () => {
       onClick: (e) => handleSelect(element.id, e.evt),
       onTap: (e) => handleSelect(element.id, e.evt),
       rotation: element.rotation || 0,
-      opacity: 1,
+      opacity: element.opacity !== undefined ? element.opacity : 1,
     };
 
     let shape;
@@ -2820,6 +3026,16 @@ const LayoutDesigner = () => {
         />
       );
     }
+    else if (element.type === 'image') {
+      shape = (
+        <ImageElement
+          element={element}
+          shapeProps={shapeProps}
+          onDblClick={() => startTextEdit(element.id)}
+          onDblTap={() => startTextEdit(element.id)}
+        />
+      );
+    }
     else if (element.type === 'group') {
       // Render grouped elements by showing their actual children
       shape = (
@@ -2836,9 +3052,10 @@ const LayoutDesigner = () => {
               y: child.y,
               width: child.width,
               height: child.height,
-              fill: child.color,
+              fill: child.type === 'image' ? undefined : child.color, // Don't set fill for images
               stroke: child.borderColor || '#000000',
               strokeWidth: child.borderWidth || 0,
+              opacity: child.opacity !== undefined ? child.opacity : 1,
               listening: true, // Allow children to be interactive
               onClick: (e) => {
                 e.cancelBubble = true; // Prevent event from bubbling to group
@@ -3087,9 +3304,10 @@ const LayoutDesigner = () => {
               y: child.y,
               width: child.width,
               height: child.height,
-              fill: child.color,
+              fill: child.type === 'image' ? undefined : child.color, // Don't set fill for images
               stroke: 'transparent', // Remove individual borders for merged objects
               strokeWidth: 0, // Remove individual borders for merged objects
+              opacity: child.opacity !== undefined ? child.opacity : 1,
               listening: false, // Children don't handle interactions in merged state
             };
             
@@ -3201,6 +3419,14 @@ const LayoutDesigner = () => {
                   strokeWidth={0}
                 />
               );
+            } else if (child.type === 'image') {
+              // Handle image children in groups
+              childShape = (
+                <ChildImageElement
+                  child={child}
+                  childProps={childProps}
+                />
+              );
             } else {
               // Default rectangle
               childShape = <Rect {...childProps} />;
@@ -3209,7 +3435,7 @@ const LayoutDesigner = () => {
             return (
               <React.Fragment key={child.id}>
                 {childShape}
-                {child.type !== 'text' && child.type !== 'line' && child.text && (
+                {child.type !== 'text' && child.type !== 'line' && child.type !== 'image' && child.text && (
                   <Text
                     x={
                       ['round', 'ellipse', 'triangle', 'pentagon', 'hexagon', 'octagon', 'star', 'arc'].includes(child.type)
@@ -3320,23 +3546,42 @@ const LayoutDesigner = () => {
   };
 
   useEffect(() => {
-    if (selectedId && transformerRef.current) {
-      const selectedNode = stageRef.current.findOne(`#${selectedId}`);
-      if (selectedNode) {
-        transformerRef.current.nodes([selectedNode]);
-        transformerRef.current.getLayer().batchDraw();
+    // Add a small delay to ensure dynamic components (like images) are fully mounted
+    const timeout = setTimeout(() => {
+      if (selectedId && transformerRef.current && stageRef.current) {
+        const selectedNode = stageRef.current.findOne(`#${selectedId}`);
+        if (selectedNode && selectedNode.getAbsoluteTransform) {
+          try {
+            transformerRef.current.nodes([selectedNode]);
+            transformerRef.current.getLayer()?.batchDraw();
+          } catch (error) {
+            console.warn('Error attaching transformer to selectedNode:', error);
+            transformerRef.current.nodes([]);
+          }
+        }
+      } else if (isMultiSelect && selectedIds.length > 1 && tempGroupBounds && transformerRef.current && stageRef.current) {
+        // Attach transformer to temp group bounds for multi-selection
+        const tempGroupNode = stageRef.current.findOne('.temp-group-bounds');
+        if (tempGroupNode && tempGroupNode.getAbsoluteTransform) {
+          try {
+            transformerRef.current.nodes([tempGroupNode]);
+            transformerRef.current.getLayer()?.batchDraw();
+          } catch (error) {
+            console.warn('Error attaching transformer to tempGroupNode:', error);
+            transformerRef.current.nodes([]);
+          }
+        }
+      } else if (transformerRef.current) {
+        try {
+          transformerRef.current.nodes([]);
+          transformerRef.current.getLayer()?.batchDraw();
+        } catch (error) {
+          console.warn('Error clearing transformer nodes:', error);
+        }
       }
-    } else if (isMultiSelect && selectedIds.length > 1 && tempGroupBounds && transformerRef.current) {
-      // Attach transformer to temp group bounds for multi-selection
-      const tempGroupNode = stageRef.current.findOne('.temp-group-bounds');
-      if (tempGroupNode) {
-        transformerRef.current.nodes([tempGroupNode]);
-        transformerRef.current.getLayer().batchDraw();
-      }
-    } else if (transformerRef.current) {
-      transformerRef.current.nodes([]);
-      transformerRef.current.getLayer().batchDraw();
-    }
+    }, 50); // Small delay to ensure components are mounted
+    
+    return () => clearTimeout(timeout);
   }, [selectedId, isMultiSelect, selectedIds.length, tempGroupBounds]);
 
   if (isLoading) {
@@ -3358,6 +3603,15 @@ const LayoutDesigner = () => {
 
   return (
     <div className="layout-designer" style={{ height: `100%` }}>
+      {/* Hidden file input for image uploads */}
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        onChange={handleImageUpload}
+        style={{ display: 'none' }}
+      />
+      
       {/* Toolbar */}
       <div className="layout-toolbar" style={styles.toolbar}>
         <div style={styles.toolbarLeft}>
@@ -3374,13 +3628,14 @@ const LayoutDesigner = () => {
                 navigate(`/events/${id}`);
               }
             }}
+            className="backLink"
             style={{
-              ...styles.backLink,
               background: 'none',
               border: 'none',
               cursor: 'pointer',
               padding: 0,
-              font: 'inherit'
+              font: 'inherit',
+              fontSize: '14px',
             }}
           >
             ← Back to Event
@@ -3421,12 +3676,11 @@ const LayoutDesigner = () => {
               <div style={{ position: 'relative', display: 'inline-block' }} data-pagesize-dropdown>
                 <button 
                   onClick={() => setShowPageSizeControls(!showPageSizeControls)}
-                  className="btn btn-small"
+                  className="btn btn-info btn-small"
                   title="Adjust page size"
                   style={{
-                    backgroundColor: showPageSizeControls ? '#3b82f6' : '#f3f4f6',
+                    backgroundColor: showPageSizeControls ? '#9a9a9aff' : '#f3f4f6',
                     color: showPageSizeControls ? 'white' : '#374151',
-                    border: `1px solid ${showPageSizeControls ? '#2563eb' : '#d1d5db'}`,
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
@@ -3536,7 +3790,7 @@ const LayoutDesigner = () => {
               <div style={{ position: 'relative', display: 'inline-block' }} data-export-dropdown data-prevent-deselect="true">
                 <button 
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
-                  className="btn btn-secondary btn-small"
+                  className="btn btn-info btn-small"
                   style={{
                     backgroundColor: showExportDropdown ? '#374151' : '',
                     color: showExportDropdown ? 'white' : '',
@@ -3661,38 +3915,87 @@ const LayoutDesigner = () => {
                     marginTop: '4px',
                     padding: '12px'
                   }}>
-                    {/* Color Section */}
-                    <div style={{ marginBottom: '12px' }}>
-                      <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', marginBottom: '6px', display: 'block' }}>Color:</label>
-                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
-                        {colorOptions.slice(0, 10).map((color, index) => {
-                          const isSelected = selectedColor === color;
-                          
-                          return (
-                            <div
-                              key={index}
-                              style={{
-                                width: '24px',
-                                height: '24px',
-                                backgroundColor: color,
-                                border: color === '#ffffff' ? '2px solid #e5e7eb' : 
-                                        isSelected ? '2px solid #374151' : '2px solid transparent',
-                                borderRadius: '4px',
-                                cursor: 'pointer',
-                                transition: 'all 0.2s ease'
-                              }}
-                              onClick={() => {
-                                changeElementColor(color);
-                                setSelectedColor(color);
-                              }}
-                              onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
-                              onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
-                              title={color}
-                            />
-                          );
-                        })}
-                      </div>
-                    </div>
+                    {/* Check if selected element(s) are images to show transparency instead of color */}
+                    {(() => {
+                      const selectedElements = selectedId 
+                        ? [layoutElements.find(el => el.id === selectedId)]
+                        : selectedIds.map(id => layoutElements.find(el => el.id === id)).filter(Boolean);
+                      
+                      const hasImages = selectedElements.some(el => el?.type === 'image');
+                      const hasOnlyImages = selectedElements.every(el => el?.type === 'image');
+                      
+                      if (hasOnlyImages && hasImages) {
+                        // Show transparency slider for images
+                        return (
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', marginBottom: '6px', display: 'block' }}>Transparency:</label>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                              <span style={{ fontSize: '11px', color: '#6b7280', minWidth: '20px' }}>0%</span>
+                              <input
+                                type="range"
+                                min="0"
+                                max="100"
+                                value={selectedTransparency}
+                                onChange={(e) => {
+                                  const transparency = parseInt(e.target.value);
+                                  setSelectedTransparency(transparency);
+                                  changeElementTransparency(transparency);
+                                }}
+                                style={{
+                                  flex: 1,
+                                  height: '4px',
+                                  borderRadius: '2px',
+                                  background: `linear-gradient(to right, 
+                                    rgba(128, 128, 128, 0.3) 0%, 
+                                    rgba(128, 128, 128, 1) 100%)`,
+                                  outline: 'none',
+                                  cursor: 'pointer'
+                                }}
+                              />
+                              <span style={{ fontSize: '11px', color: '#6b7280', minWidth: '30px' }}>100%</span>
+                            </div>
+                            <div style={{ textAlign: 'center', marginTop: '4px', fontSize: '11px', color: '#374151' }}>
+                              {selectedTransparency}% opacity
+                            </div>
+                          </div>
+                        );
+                      } else {
+                        // Show color picker for non-images
+                        return (
+                          <div style={{ marginBottom: '12px' }}>
+                            <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', marginBottom: '6px', display: 'block' }}>Color:</label>
+                            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
+                              {colorOptions.slice(0, 10).map((color, index) => {
+                                const isSelected = selectedColor === color;
+                                
+                                return (
+                                  <div
+                                    key={index}
+                                    style={{
+                                      width: '24px',
+                                      height: '24px',
+                                      backgroundColor: color,
+                                      border: color === '#ffffff' ? '2px solid #e5e7eb' : 
+                                              isSelected ? '2px solid #374151' : '2px solid transparent',
+                                      borderRadius: '4px',
+                                      cursor: 'pointer',
+                                      transition: 'all 0.2s ease'
+                                    }}
+                                    onClick={() => {
+                                      changeElementColor(color);
+                                      setSelectedColor(color);
+                                    }}
+                                    onMouseEnter={(e) => e.target.style.transform = 'scale(1.1)'}
+                                    onMouseLeave={(e) => e.target.style.transform = 'scale(1)'}
+                                    title={color}
+                                  />
+                                );
+                              })}
+                            </div>
+                          </div>
+                        );
+                      }
+                    })()}
                     
                     {/* Border Section */}
                     <div>
@@ -5318,12 +5621,6 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     gap: '0.5rem',
-  },
-  backLink: {
-    color: '#3b82f6',
-    textDecoration: 'none',
-    fontSize: '1rem',
-    fontWeight: '500',
   },
   eventTitle: {
     margin: 0,

@@ -454,12 +454,40 @@
 }
 
 .btn-danger {
-  background-color: #ef4444;
-  color: white;
+  background-color: #ffffff;
+  color: #9d9d9d;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1.5px solid #9d9d9d;
+  transition: all 0.2s ease;
+  user-select: none;
 }
 
 .btn-danger:hover {
-  background-color: #dc2626;
+  border: 1.5px solid #da2222;
+  color: #da2222;
+  background-color: #ffffff;
+}
+
+.btn-purple {
+  background-color: #5a35d5;
+  color: #ffffff;
+  padding: 0.5rem 0.6rem;
+  border-radius: 10px;
+  cursor: pointer;
+  font-size: 14px;
+  font-weight: 500;
+  border: 1.5px solid #5a35d5;
+  transition: all 0.2s ease;
+  user-select: none;
+}
+
+.btn-purple:hover {
+  background-color: rgb(74, 21, 189);
+  border: 1.5px solid rgb(74, 21, 189);
 }
 
 .btn-upload {
@@ -481,20 +509,21 @@
 }
 
 .btn-cancel {
-  background-color: #ffffffff;
+  background-color: #ffffff;
   color: #9d9d9d;
-  padding: 0.4rem 0.5rem;
+  padding: 0.5rem 0.6rem;
   border-radius: 10px;
   cursor: pointer;
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   border: 1.5px solid #9d9d9d;
   transition: all 0.2s ease;
   user-select: none;
 }
 .btn-cancel:hover {
-  background-color: #9d9d9d;
-  color: white;
+  border: 1.5px solid rgb(97, 97, 97);
+  color: rgb(97, 97, 97);
+  background-color: #ffffff;
 }
 
 .btn-green {

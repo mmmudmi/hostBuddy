@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { act, useEffect } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchEventById, deleteEvent, clearCurrentEvent } from '../store/eventSlice';
@@ -48,36 +48,47 @@ const EventDetails = () => {
     });
   };
 
-  const formatEventDate = (event) => {
+    const formatTime = (event) => {
+    if (!event.start_time) return 'No time set';
+    const startTime = new Date(`1970-01-01T${event.start_time}`);
+    const endTime = event.end_time ? new Date(`1970-01-01T${event.end_time}`) : null;
+    if (endTime && endTime.getTime() !== startTime.getTime()) {
+      return `${startTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })} - ${endTime.toLocaleTimeString('en-US', {
+        hour: '2-digit',
+        minute: '2-digit',
+      })}`;
+    }
+    return startTime.toLocaleTimeString('en-US', {
+      hour: '2-digit',
+      minute: '2-digit',
+    });
+  };
+
+  const formatEventDates = (event) => {
+    console.log('Formatting dates for event:', event);
     if (!event.start_date) return 'No date set';
     
     const startDate = new Date(event.start_date);
     const endDate = event.end_date ? new Date(event.end_date) : null;
     
-    const dateStr = startDate.toLocaleDateString('en-US', {
-      weekday: 'long',
-      year: 'numeric',
-      month: 'long',
-      day: 'numeric',
-    });
-    
-    const endDateStr = endDate && endDate.getTime() !== startDate.getTime() 
-      ? endDate.toLocaleDateString('en-US', {
-          weekday: 'long',
-          year: 'numeric',
-          month: 'long',
-          day: 'numeric',
-        })
-      : null;
-    
-    const timeStr = event.start_time && event.end_time 
-      ? `${event.start_time} - ${event.end_time}`
-      : '';
-    
-    if (endDateStr) {
-      return `${dateStr} to ${endDateStr}${timeStr ? `, ${timeStr}` : ''}`;
+    if (endDate && endDate.getTime() !== startDate.getTime()) {
+      return `${startDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric' 
+      })} - ${endDate.toLocaleDateString('en-US', { 
+        month: 'short', 
+        day: 'numeric', 
+        year: 'numeric' 
+      })}`;
     } else {
-      return `${dateStr}${timeStr ? `, ${timeStr}` : ''}`;
+      return `${startDate.toLocaleDateString('en-US', {
+        month: 'short',
+        day: 'numeric',
+        year: 'numeric'
+      })}`;
     }
   };
 
@@ -130,17 +141,24 @@ const EventDetails = () => {
   }
 
   return (
-    <div style={styles.container}>
+    <div className="background" style={styles.container}>
       <div className="container">
         {/* Header */}
         <div style={styles.header}>
-          <Link to="/dashboard" style={styles.backLink}>
+          <Link to="/dashboard" className="backLink">
             ← Back to Dashboard
           </Link>
         </div>
 
         {/* Event Details */}
         <div style={styles.eventContainer}>
+          <div style={styles.statusBadge}>
+            {hasUpcomingDates() ? (
+              <span style={styles.upcomingBadge}>Upcoming</span>
+            ) : (
+              <span style={styles.pastBadge}>Past Event</span>
+            )}
+          </div>
           <div className="grid grid-cols-1 md:grid-cols-2" style={{ gap: '3rem' }}>
             {/* Event Image */}
             <div>
@@ -161,26 +179,32 @@ const EventDetails = () => {
             <div>
               <div style={styles.eventHeader}>
                 <h1 style={styles.eventTitle}>{currentEvent.title}</h1>
-                <div style={styles.statusBadge}>
-                  {hasUpcomingDates() ? (
-                    <span style={styles.upcomingBadge}>Upcoming</span>
-                  ) : (
-                    <span style={styles.pastBadge}>Past Event</span>
-                  )}
-                </div>
               </div>
 
               <div style={styles.eventMeta}>
+                <div style={styles.description}>
+                  <p style={styles.descriptionText}>{currentEvent.description}</p>
+                </div>
+
                 <div style={styles.metaItem}>
                   <span style={styles.metaIcon}>📅</span>
                   <div>
-                    <div style={styles.metaLabel}>Event Date & Time</div>
+                    <div style={styles.metaLabel}>Event Date</div>
                     <div style={styles.metaValue}>
                       <div style={styles.eventDateItem}>
-                        {formatEventDate(currentEvent)}
-                        {hasUpcomingDates() && (
-                          <span style={styles.upcomingLabel}> (Upcoming)</span>
-                        )}
+                        {formatEventDates(currentEvent)}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={styles.metaItem}>
+                  <span style={styles.metaIcon}>⏰</span>
+                  <div>
+                    <div style={styles.metaLabel}>Event Time</div>
+                    <div style={styles.metaValue}>
+                      <div style={styles.eventDateItem}>
+                        {formatTime(currentEvent)}
                       </div>
                     </div>
                   </div>
@@ -195,37 +219,38 @@ const EventDetails = () => {
                 </div>
               </div>
 
-              <div style={styles.description}>
-                <h3 style={styles.sectionTitle}>Description</h3>
-                <p style={styles.descriptionText}>{currentEvent.description}</p>
-              </div>
 
               {/* Action Buttons */}
               <div style={styles.actionButtons}>
                 <Link 
                   to={`/events/${id}/layout`}
-                  className="btn btn-primary"
-                  style={styles.designButton}
+                  className="btn btn-purple"
+                  style={styles.actionButton}
                 >
-                  🎨 Design Layout
+                  <i class="fa-solid fa-pen-ruler" style={{ marginRight: '0.5rem' }}></i>
+                  Design Layout
                 </Link>
                 <Link 
                   to={`/events/${id}/edit`}
-                  className="btn btn-secondary"
+                  className="btn btn-cancel"
+                  style={styles.actionButton}
                 >
-                  ✏️ Edit Event
+                  <i class="fa-solid fa-pen-to-square" style={{ marginRight: '0.5rem' }}></i>
+                  Edit
                 </Link>
                 <button 
                   onClick={handleDeleteEvent}
                   className="btn btn-danger"
+                  style={styles.actionButton}
                 >
-                  🗑️ Delete Event
+                  <i class="fa-solid fa-trash" style={{ marginRight: '0.5rem' }}></i>
+                  Delete
                 </button>
               </div>
             </div>
           </div>
 
-          {/* Additional Information */}
+          {/* Additional Information
           <div style={styles.additionalInfo}>
             <h3 style={styles.sectionTitle}>Event Details</h3>
             <div className="grid grid-cols-1 md:grid-cols-3" style={{ gap: '1.5rem' }}>
@@ -238,7 +263,8 @@ const EventDetails = () => {
                 <p>{new Date(currentEvent.updated_at).toLocaleDateString()}</p>
               </div>
             </div>
-          </div>
+          </div> */}
+
         </div>
       </div>
     </div>
@@ -254,12 +280,6 @@ const styles = {
   header: {
     marginBottom: '2rem',
   },
-  backLink: {
-    color: '#3b82f6',
-    textDecoration: 'none',
-    fontSize: '1rem',
-    fontWeight: '500',
-  },
   eventContainer: {
     backgroundColor: 'white',
     borderRadius: '12px',
@@ -269,7 +289,7 @@ const styles = {
   eventImage: {
     width: '100%',
     height: '400px',
-    objectFit: 'cover',
+    objectFit: 'scale-down',
     borderRadius: '12px',
   },
   placeholderImage: {
@@ -292,14 +312,19 @@ const styles = {
     marginBottom: '2rem',
   },
   eventTitle: {
-    fontSize: '2.5rem',
+    fontSize: '1.5rem',
     fontWeight: 'bold',
     color: '#1f2937',
     margin: 0,
     flex: 1,
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   statusBadge: {
-    marginLeft: '1rem',
+    marginBottom: '1rem',
+    marginTop: '-1rem',
+    display: 'flex',
+    justifyContent: 'flex-end',
   },
   upcomingBadge: {
     backgroundColor: '#10b981',
@@ -336,13 +361,17 @@ const styles = {
     fontWeight: '500',
   },
   metaValue: {
-    fontSize: '1.1rem',
+    fontSize: '1rem',
     color: '#1f2937',
-    fontWeight: '600',
+    fontWeight: '500',
     marginTop: '0.25rem',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   description: {
     marginBottom: '2rem',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   sectionTitle: {
     fontSize: '1.25rem',
@@ -354,14 +383,17 @@ const styles = {
     color: '#4b5563',
     lineHeight: '1.7',
     fontSize: '1rem',
+    whiteSpace: 'pre-wrap',
+    overflowWrap: 'anywhere',
   },
   actionButtons: {
     display: 'flex',
     gap: '1rem',
     flexWrap: 'wrap',
+    justifyContent: 'center',
+    margin: '3rem 0 1rem 0',
   },
-  designButton: {
-    fontSize: '1rem',
+  actionButton: {
     fontWeight: '600',
   },
   additionalInfo: {
@@ -383,10 +415,6 @@ const styles = {
   },
   eventDateItem: {
     marginBottom: '0.5rem',
-    padding: '0.5rem',
-    backgroundColor: 'white',
-    borderRadius: '6px',
-    border: '1px solid #e5e7eb',
   },
   upcomingLabel: {
     color: '#059669',
