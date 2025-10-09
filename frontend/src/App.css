@@ -432,6 +432,7 @@
 
 .btn-primary {
   background-color: #000000;
+  border-radius: 8px;
   color: white;
 }
 

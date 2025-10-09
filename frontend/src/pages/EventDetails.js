@@ -141,7 +141,7 @@ const EventDetails = () => {
   }
 
   return (
-    <div className="background" style={styles.container}>
+    <div style={styles.container}>
       <div className="container">
         {/* Header */}
         <div style={styles.header}>

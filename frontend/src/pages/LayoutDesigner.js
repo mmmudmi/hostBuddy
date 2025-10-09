@@ -286,11 +286,50 @@ const LayoutDesigner = () => {
   // Calculate scale factor to fit stage within 800px width while maintaining aspect ratio
   const CANVAS_SCALE = Math.min(800 / currentPreset.canvasWidth, 1);
 
-  // Available color options
   const colorOptions = [
-    '#8b5cf6', '#10b981', '#f59e0b', '#ef4444', '#06b6d4', '#fbbf24', '#f97316',
-    '#6366f1', '#ec4899', '#84cc16', '#f43f5e', '#06b6d4', '#8b5cf6', '#374151',
-    '#1f2937', '#ffffff', '#000000', '#6b7280', '#9ca3af', '#d1d5db'
+    '#ef4444', // Red
+    '#f97316', // Orange
+    '#f59e0b', // Amber
+    '#84cc16', // Lime
+    '#10b981', // Green
+    '#06b6d4', // Cyan
+    '#3b82f6', // Blue
+    '#6366f1', // Indigo
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#f43f5e', // Rose
+    '#14b8a6', // Teal
+    '#fde68a', // Light amber
+    '#a7f3d0', // Light green
+    '#bfdbfe', // Light blue
+    '#ddd6fe', // Light violet
+    '#fbcfe8', // Light pink
+    '#fef3c7', // Cream
+    '#000000', // Black
+    '#374151', // Dark gray
+    '#6b7280', // Medium gray
+    '#9ca3af', // Light gray
+    '#d1d5db', // Lighter gray
+    '#e5e7eb', // Cool gray-blue
+    '#ffffff'  // White
+  ];
+
+  const borderColorOptions = [
+    '#ef4444', // Red
+    '#f97316', // Orange
+    '#f59e0b', // Amber
+    '#84cc16', // Lime
+    '#10b981', // Green
+    '#06b6d4', // Cyan
+    '#3b82f6', // Blue
+    '#6366f1', // Indigo
+    '#8b5cf6', // Violet
+    '#ec4899', // Pink
+    '#f43f5e', // Rose
+    '#000000', // Black
+    '#374151', // Dark gray
+    '#6b7280', // Medium gray
+    '#9ca3af', // Light gray
   ];
 
   // Layout elements available for adding to canvas
@@ -708,6 +747,49 @@ const LayoutDesigner = () => {
     return snapToGridPosition(startX, startY);
   }, [layoutElements, snapToGridPosition, GRID_SIZE_X, GRID_SIZE_Y]);
 
+  // Calculate optimal font size based on element dimensions
+  const calculateOptimalFontSize = useCallback((width, height, text = 'Text', minSize = 8, maxSize = 72) => {
+    // Use 90% of dimensions to account for padding and ensure text doesn't exceed boundaries
+    const availableWidth = width * 0.9;
+    const availableHeight = height * 0.9;
+    const baseDimension = Math.min(availableWidth, availableHeight);
+    
+    // Calculate font size as a ratio of the smaller dimension - more conservative
+    let fontSize = Math.max(baseDimension * 0.2, minSize);
+    
+    // For very wide rectangles, we might want to consider height more heavily
+    const aspectRatio = width / height;
+    if (aspectRatio > 3) {
+      // Very wide element - use height as primary factor, more conservative
+      fontSize = Math.max(availableHeight * 0.4, minSize);
+    } else if (aspectRatio < 0.33) {
+      // Very tall element - use width as primary factor, more conservative
+      fontSize = Math.max(availableWidth * 0.5, minSize);
+    }
+    
+    // Adjust font size based on text length (longer text needs smaller font to fit)
+    if (text && text.length > 0) {
+      const textLength = text.length;
+      if (textLength > 10) {
+        fontSize *= Math.max(0.5, 8 / textLength);
+      } else if (textLength > 5) {
+        fontSize *= Math.max(0.7, 10 / textLength);
+      }
+    }
+    
+    // Additional constraint: estimate text width and ensure it fits
+    // Rough approximation: each character is about 0.6 * fontSize wide
+    if (text && text.length > 0) {
+      const estimatedTextWidth = text.length * fontSize * 0.6;
+      if (estimatedTextWidth > availableWidth) {
+        fontSize = (availableWidth / (text.length * 0.6)) * 0.9; // Add 10% safety margin
+      }
+    }
+    
+    // Ensure font size stays within reasonable bounds
+    return Math.min(Math.max(fontSize, minSize), maxSize);
+  }, []);
+
   // Add custom element to layout
   const addCustomElementToLayout = useCallback(async (customElement) => {
     if (!customElement.element_data) return;
@@ -1031,6 +1113,16 @@ const LayoutDesigner = () => {
         imageData: elementData.type === 'image' ? elementData.imageData : undefined,
       };
       
+      // Calculate fontSize for text elements if not already set
+      if (newElement.type === 'text' && !newElement.fontSize) {
+        newElement.fontSize = calculateOptimalFontSize(newElement.width, newElement.height, newElement.text);
+      }
+      
+      // Calculate fontSize for other elements that have text if not already set
+      if (newElement.type !== 'text' && newElement.text && !newElement.fontSize) {
+        newElement.fontSize = calculateOptimalFontSize(newElement.width, newElement.height, newElement.text);
+      }
+      
       console.log('🔍 DEBUG: New element after creation:', {
         newElementId: newElement.id,
         newElementInstanceId: newElement.instanceId,
@@ -1073,7 +1165,7 @@ const LayoutDesigner = () => {
       });
       setHasUnsavedChanges(true);
     }
-  }, [calculateMergedOutlinePath, getOptimalPlacementPosition]); // getElementVisualBounds is stable and doesn't need to be in deps
+  }, [calculateMergedOutlinePath, getOptimalPlacementPosition, calculateOptimalFontSize, generateUniqueId]);
 
   // Delete custom element
   const deleteCustomElement = useCallback(async (elementId) => {
@@ -1186,6 +1278,7 @@ const LayoutDesigner = () => {
     // Add special properties for text elements
     if (elementType.type === 'text') {
       newElement.text = 'Text';
+      newElement.fontSize = calculateOptimalFontSize(elementType.defaultWidth, elementType.defaultHeight, 'Text');
     }
     
     setLayoutElements(prev => [...prev, newElement]);
@@ -1596,7 +1689,20 @@ const LayoutDesigner = () => {
       } else {
         // Regular element editing
         if (trimmedText) {
-          updateElement(editingTextId, { text: trimmedText });
+          const element = layoutElements.find(el => el.id === editingTextId);
+          const updates = { text: trimmedText };
+          
+          // Recalculate fontSize for text elements when text changes
+          if (element && element.type === 'text') {
+            updates.fontSize = calculateOptimalFontSize(element.width, element.height, trimmedText);
+          }
+          
+          // Also recalculate fontSize for other elements that now have text
+          if (element && element.type !== 'text') {
+            updates.fontSize = calculateOptimalFontSize(element.width, element.height, trimmedText);
+          }
+          
+          updateElement(editingTextId, updates);
         } else {
           // Remove text property if empty
           updateElement(editingTextId, { text: undefined });
@@ -1607,7 +1713,7 @@ const LayoutDesigner = () => {
       setEditingText('');
       setEditingChildElement(null);
     }
-  }, [editingTextId, editingText, editingChildElement, updateElement, layoutElements]);
+  }, [editingTextId, editingText, editingChildElement, updateElement, layoutElements, calculateOptimalFontSize]);
 
   // Cancel text editing
   const cancelTextEdit = useCallback(() => {
@@ -2411,7 +2517,7 @@ const LayoutDesigner = () => {
             width: scaledWidth,
             height: scaledHeight,
             text: label, // Add the number as text content displayed on the element
-            fontSize: originalElement.fontSize || 16,
+            fontSize: calculateOptimalFontSize(scaledWidth, scaledHeight, label),
           };
           
           modifiedElements.push(modifiedElement);
@@ -2426,7 +2532,7 @@ const LayoutDesigner = () => {
             width: scaledWidth,
             height: scaledHeight,
             text: label, // Add the number as text content displayed on the element
-            fontSize: originalElement.fontSize || 16,
+            fontSize: calculateOptimalFontSize(scaledWidth, scaledHeight, label),
             instanceId: generateUniqueId('duplicate_instance'),
           };
           
@@ -2461,7 +2567,7 @@ const LayoutDesigner = () => {
     }
     
     console.log('Duplication completed');
-  }, [selectedId, isMultiSelect, selectedIds, layoutElements, duplicationConfig, generateLabel, calculateDuplicatePosition, currentPreset]);
+  }, [selectedId, isMultiSelect, selectedIds, layoutElements, duplicationConfig, generateLabel, calculateDuplicatePosition, currentPreset, calculateOptimalFontSize, generateUniqueId]);
 
   // Cancel duplication
   const cancelDuplication = useCallback(() => {
@@ -3238,13 +3344,27 @@ const LayoutDesigner = () => {
         });
       } else {
         // For regular elements, use the original logic
-        updateElement(element.id, {
+        const newWidth = Math.max(5, node.width() * scaleX);
+        const newHeight = Math.max(5, node.height() * scaleY);
+        const updates = {
           x: node.x(),
           y: node.y(),
-          width: Math.max(5, node.width() * scaleX),
-          height: Math.max(5, node.height() * scaleY),
+          width: newWidth,
+          height: newHeight,
           rotation: node.rotation(),
-        });
+        };
+        
+        // For text elements, also update font size based on new dimensions
+        if (element.type === 'text') {
+          updates.fontSize = calculateOptimalFontSize(newWidth, newHeight, element.text);
+        }
+        
+        // For other elements that have text, also update their font size
+        if (element.type !== 'text' && element.text) {
+          updates.fontSize = calculateOptimalFontSize(newWidth, newHeight, element.text);
+        }
+        
+        updateElement(element.id, updates);
       }
       
       // Reset scale after applying the changes
@@ -3427,7 +3547,7 @@ const LayoutDesigner = () => {
         <Text
           {...shapeProps}
           text={element.text || element.label || 'Text'}
-          fontSize={16}
+          fontSize={element.fontSize || calculateOptimalFontSize(element.width, element.height, element.text)}
           fill={element.color}
           width={element.width}
           height={element.height}
@@ -3936,15 +4056,15 @@ const LayoutDesigner = () => {
                 : element.y + element.height / 2  // For rectangles, y is top-left, so add half height
             }
             text={element.text}
-            fontSize={14}
+            fontSize={element.fontSize || calculateOptimalFontSize(element.width, element.height, element.text)}
             fill="white"
             fontStyle="bold"
             align="center"
             verticalAlign="middle"
-            width={100}  // Set a width for the text area
-            height={30}  // Set a height for the text area
-            offsetX={50}  // Offset by half the width to center horizontally
-            offsetY={15}  // Offset by half the height to center vertically
+            width={Math.min(element.width * 0.9, element.width - 10)}  // Use 90% of element width or element width minus 10px padding, whichever is smaller
+            height={Math.min(element.height * 0.9, element.height - 10)}  // Use 90% of element height or element height minus 10px padding, whichever is smaller
+            offsetX={Math.min(element.width * 0.9, element.width - 10) / 2}  // Offset by half the text width to center horizontally
+            offsetY={Math.min(element.height * 0.9, element.height - 10) / 2}  // Offset by half the text height to center vertically
             listening={false}
             // Add text shadow for better visibility
             shadowColor="rgba(0, 0, 0, 0.5)"
@@ -4065,10 +4185,15 @@ const LayoutDesigner = () => {
                 setLayoutTitle(e.target.value);
                 setHasUnsavedChanges(true);
               }}
+              className='form-input'
               style={{
-                ...styles.titleInput,
-                borderColor: hasUnsavedChanges ? '#f59e0b' : '#d1d5db',
-                backgroundColor:'white'
+                padding: '8px 12px',
+                borderRadius: '6px',
+                fontSize: '14px',
+                width: '200px',
+                height: '28px',
+                boxSizing: 'border-box',
+                backgroundColor: hasUnsavedChanges ? '#fff3ddff' : 'white',
               }}
               autoComplete="off"
             />
@@ -4084,6 +4209,28 @@ const LayoutDesigner = () => {
                 {isSaving ? 'Saving...' : 'Save'}
               </button>
               
+              {/* Grid Toggle Button */}
+              <button 
+                onClick={() => setSnapToGrid(!snapToGrid)}
+                className="btn btn-info btn-small"
+                title={snapToGrid ? "Turn off grid snapping" : "Turn on grid snapping"}
+                style={{
+                  backgroundColor: snapToGrid ? '#10b981' : '#f3f4f6',
+                  color: snapToGrid ? 'white' : '#374151',
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '4px',
+                  padding: '6px 12px',
+                  borderRadius: '8px',
+                  cursor: 'pointer',
+                  fontSize: '12px',
+                  transition: 'all 0.2s ease',
+                  height: '26px'
+                }}
+              >
+                Grid {snapToGrid ? 'ON' : 'OFF'}
+              </button>
+              
               {/* Page Size Controls */}
               <div style={{ position: 'relative', display: 'inline-block' }} data-pagesize-dropdown>
                 <button 
@@ -4091,20 +4238,20 @@ const LayoutDesigner = () => {
                   className="btn btn-info btn-small"
                   title="Adjust page size"
                   style={{
-                    backgroundColor: showPageSizeControls ? '#9a9a9aff' : '#f3f4f6',
-                    color: showPageSizeControls ? 'white' : '#374151',
+                    backgroundColor: showPageSizeControls ? '#9a9a9aff' : '#e2e2e2',
+                    color: showPageSizeControls ? 'white' : '#000000ff',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
                     padding: '6px 12px',
-                    borderRadius: '6px',
+                    borderRadius: '8px',
                     cursor: 'pointer',
                     fontSize: '12px',
                     transition: 'all 0.2s ease',
                     height: '26px'
                   }}
                 >
-                  📐 Page Size
+                  Page Size
                   {/* 📐 {pageSize.width} × {pageSize.height} */}
                 </button>
 
@@ -4204,11 +4351,17 @@ const LayoutDesigner = () => {
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   className="btn btn-info btn-small"
                   style={{
-                    backgroundColor: showExportDropdown ? '#374151' : '',
-                    color: showExportDropdown ? 'white' : '',
+                    backgroundColor: showPageSizeControls ? '#9a9a9aff' : '#e2e2e2',
+                    color: showPageSizeControls ? 'white' : '#000000ff',
                     display: 'flex',
                     alignItems: 'center',
-                    gap: '4px'
+                    gap: '4px',
+                    padding: '6px 12px',
+                    borderRadius: '8px',
+                    cursor: 'pointer',
+                    fontSize: '12px',
+                    transition: 'all 0.2s ease',
+                    height: '26px'
                   }}
                 >
                   📥 Export ▾
@@ -4376,7 +4529,7 @@ const LayoutDesigner = () => {
                           <div style={{ marginBottom: '12px' }}>
                             <label style={{ fontSize: '12px', fontWeight: 'bold', color: '#374151', marginBottom: '6px', display: 'block' }}>Color:</label>
                             <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
-                              {colorOptions.slice(0, 10).map((color, index) => {
+                              {colorOptions.map((color, index) => {
                                 const isSelected = selectedColor === color;
                                 
                                 return (
@@ -4516,7 +4669,7 @@ const LayoutDesigner = () => {
                       <div>
                         {/* <span style={{ fontSize: '11px', color: '#6b7280', marginBottom: '4px', display: 'block' }}>Color:</span> */}
                         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '4px', justifyContent: 'center', justifyItems: 'center' }}>
-                          {['#000000', '#ffffff', '#ef4444', '#f59e0b', '#10b981', '#3b82f6', '#8b5cf6', '#6b7280', '#ec4899', '#84cc16'].map((color, index) => {
+                          {borderColorOptions.map((color, index) => {
                             const isSelected = selectedBorderColor === color;
                             
                             return (
@@ -4847,7 +5000,6 @@ const LayoutDesigner = () => {
                 return elementsToSave.length > 0 ? (
                   <button
                     onClick={() => {
-                      console.log('Save button clicked!', { selectedIds, selectedId, elementsToSave });
                       setShowSaveElementDialog(true);
                     }}
                     style={{
@@ -4868,6 +5020,7 @@ const LayoutDesigner = () => {
                 <div style={styles.filterContainer}>
                   <input
                     type="text"
+                    className="form-input" 
                     placeholder="Search elements..."
                     value={customElementsFilter.search}
                     onChange={(e) => setCustomElementsFilter(prev => ({...prev, search: e.target.value}))}
@@ -4904,21 +5057,18 @@ const LayoutDesigner = () => {
                         {/* Mini Konva preview of the actual elements */}
                         <div 
                           style={{
-                            width: '60px',
-                            height: '60px',
+                            width: '50px',
+                            height: '50px',
                             display: element.thumbnail ? 'none' : 'flex',
                             alignItems: 'center',
                             justifyContent: 'center',
                             overflow: 'hidden',
-                            border: '1px solid #e5e7eb',
-                            borderRadius: '4px',
-                            backgroundColor: '#ffffff',
                             position: 'relative'
                           }}
                         >
                           <Stage 
-                            width={60} 
-                            height={60}
+                            width={50} 
+                            height={50}
                             style={{ 
                               pointerEvents: 'none',
                               display: 'block'
@@ -4927,8 +5077,7 @@ const LayoutDesigner = () => {
                             <Layer>
                               {element.element_data && element.element_data.elements && element.element_data.elements.length > 0 ? (
                                 (() => {
-                                  const elements = element.element_data.elements;
-                                  
+                                  const elements = element.element_data.elements;          
                                   // Handle merged elements specially
                                   if (elements.length === 1 && elements[0].type === 'merged' && elements[0].children) {
                                     const mergedChildren = elements[0].children;
@@ -4962,9 +5111,9 @@ const LayoutDesigner = () => {
                                     
                                     const boundingWidth = Math.max(maxX - minX, 20);
                                     const boundingHeight = Math.max(maxY - minY, 20);
-                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
-                                    const offsetX = (60 - boundingWidth * scale) / 2;
-                                    const offsetY = (60 - boundingHeight * scale) / 2;
+                                    const scale = Math.min(40 / boundingWidth, 40 / boundingHeight, 1);
+                                    const offsetX = (50 - boundingWidth * scale) / 2;
+                                    const offsetY = (50 - boundingHeight * scale) / 2;
                                                                         
                                     return mergedChildren.map((child, idx) => {
                                       // For centered shapes, adjust positioning
@@ -5030,11 +5179,22 @@ const LayoutDesigner = () => {
                                     // Handle grouped elements specially - render the children directly
                                     console.log('📋 Grouped element detected, using children');
                                     const groupedChildren = elements[0].children;
-                                    console.log('🔍 Grouped children details:', groupedChildren.map(child => ({ type: child.type, borderWidth: child.borderWidth, borderColor: child.borderColor })));
+                                    console.log('🔍 Grouped children details:', groupedChildren.map(child => ({ type: child.type, borderWidth: child.borderWidth, borderColor: child.borderColor, hasChildren: !!child.children })));
                                     
-                                    // Calculate bounds for grouped children (same logic as merged)
-                                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                                    // Flatten merged children within the group
+                                    const allChildren = [];
                                     groupedChildren.forEach(child => {
+                                      if (child.type === 'merged' && child.children) {
+                                        console.log('🔄 Found merged element within group, flattening its children');
+                                        allChildren.push(...child.children);
+                                      } else {
+                                        allChildren.push(child);
+                                      }
+                                    });
+                                                                        
+                                    // Calculate bounds for all flattened children
+                                    let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+                                    allChildren.forEach(child => {
                                       const x = child.x || 0;
                                       const y = child.y || 0;
                                       const w = child.width || 20;
@@ -5061,13 +5221,13 @@ const LayoutDesigner = () => {
                                     
                                     const boundingWidth = Math.max(maxX - minX, 20);
                                     const boundingHeight = Math.max(maxY - minY, 20);
-                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
-                                    const offsetX = (60 - boundingWidth * scale) / 2;
-                                    const offsetY = (60 - boundingHeight * scale) / 2;
+                                    const scale = Math.min(40 / boundingWidth, 40 / boundingHeight, 1);
+                                    const offsetX = (50 - boundingWidth * scale) / 2;
+                                    const offsetY = (50 - boundingHeight * scale) / 2;
                                     
                                     console.log('📐 Grouped bounds:', { minX, minY, maxX, maxY, boundingWidth, boundingHeight, scale, offsetX, offsetY });
                                     
-                                    return groupedChildren.map((child, idx) => {
+                                    return allChildren.map((child, idx) => {
                                       // For centered shapes, adjust positioning
                                       let scaledX, scaledY;
                                       if (child.type === 'round' || child.type === 'star' || child.type === 'arc' || 
@@ -5131,7 +5291,7 @@ const LayoutDesigner = () => {
                                       }
                                     });
                                   } else {
-                                    // Regular elements (non-merged)
+                                    // Regular elements (non-merged, non-grouped)
                                     let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
                                     elements.forEach(el => {
                                       const x = el.x || 0;
@@ -5158,13 +5318,25 @@ const LayoutDesigner = () => {
                                     
                                     const boundingWidth = Math.max(maxX - minX, 20);
                                     const boundingHeight = Math.max(maxY - minY, 20);
-                                    const scale = Math.min(50 / boundingWidth, 50 / boundingHeight, 1);
-                                    const offsetX = (60 - boundingWidth * scale) / 2;
-                                    const offsetY = (60 - boundingHeight * scale) / 2;
-                                                                        
+                                    const scale = Math.min(40 / boundingWidth, 40 / boundingHeight, 1);
+                                    const offsetX = (50 - boundingWidth * scale) / 2;
+                                    const offsetY = (50 - boundingHeight * scale) / 2;
+                                    
                                     return elements.map((el, idx) => {
-                                      const scaledX = (el.x - minX) * scale + offsetX;
-                                      const scaledY = (el.y - minY) * scale + offsetY;
+                                      // For centered shapes, adjust positioning
+                                      let scaledX, scaledY;
+                                      if (el.type === 'round' || el.type === 'star' || el.type === 'arc' || 
+                                          el.type === 'triangle' || el.type === 'pentagon' || el.type === 'hexagon' || 
+                                          el.type === 'octagon' ) {
+                                        // Centered shapes - keep them centered
+                                        scaledX = (el.x - minX) * scale + offsetX;
+                                        scaledY = (el.y - minY) * scale + offsetY;
+                                      } else {
+                                        // Corner-based shapes
+                                        scaledX = (el.x - minX) * scale + offsetX;
+                                        scaledY = (el.y - minY) * scale + offsetY;
+                                      }
+                                      
                                       const scaledWidth = (el.width || 20) * scale;
                                       const scaledHeight = (el.height || 20) * scale;
                                       
@@ -5214,7 +5386,7 @@ const LayoutDesigner = () => {
                                 })()
                               ) : (
                                 // Fallback placeholder
-                                <Text x={30} y={30} text="?" fontSize={16} fill="#9ca3af" align="center" />
+                                <Text x={25} y={25} text="?" fontSize={16} fill="#9ca3af" align="center" />
                               )}
                             </Layer>
                           </Stage>
@@ -5227,9 +5399,7 @@ const LayoutDesigner = () => {
                         >
                           {element.element_data && element.element_data.type === 'group' ? '📦' : '🔷'}
                         </div>
-                        <div style={styles.elementInfo}>
-                          <span style={styles.elementName}>{element.name}</span>
-                        </div>
+                        <span style={styles.elementLabel}>{element.name}</span>
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
@@ -5249,7 +5419,7 @@ const LayoutDesigner = () => {
                   </div>
                 ) : (
                   <div style={styles.emptyState}>
-                    No custom elements yet. Select any element(s) and click the save button to create your first custom element!
+                    No custom elements yet.
                   </div>
                 )}
               </div>
@@ -6045,15 +6215,6 @@ const styles = {
     fontSize: '1.25rem',
     color: '#1f2937',
   },
-  titleInput: {
-    padding: '8px 12px',
-    border: '1px solid #d1d5db',
-    borderRadius: '6px',
-    fontSize: '14px',
-    width: '200px',
-    height: '28px',
-    boxSizing: 'border-box',
-  },
   unsavedIndicator: {
     color: '#f59e0b',
     fontSize: '1.5rem',
@@ -6138,10 +6299,10 @@ const styles = {
   layoutItem: {
     padding: '0.75rem',
     backgroundColor: 'white',
-    border: '1px solid #e2e8f0',
     borderRadius: '6px',
     transition: 'background-color 0.2s',
     display: 'flex',
+    boxShadow: '0 1px 2px rgba(0, 0, 0, 0.15)',
     justifyContent: 'space-between',
     alignItems: 'center',
     position: 'relative',
@@ -6555,43 +6716,44 @@ const styles = {
   },
   searchInput: {
     padding: '6px 8px',
-    border: '1px solid #d1d5db',
-    borderRadius: '4px',
+    borderRadius: '7px',
     fontSize: '12px',
   },
 
   customElementGrid: {
-    display: 'flex',
-    flexDirection: 'column',
-    gap: '8px',
-    maxHeight: '250px',
+    display: 'grid',
+    gridTemplateColumns: 'repeat(2, 1fr)',
+    gap: '0.5rem',
+    maxHeight: '260px',
     overflowY: 'auto',
   },
   customElementItem: {
-    display: 'flex',
-    alignItems: 'center',
-    gap: '8px',
-    padding: '8px',
-    border: '1px solid #e5e7eb',
-    borderRadius: '6px',
+    padding: '0.75rem 0.5rem',
+    borderRadius: '8px',
     cursor: 'pointer',
-    transition: 'all 0.2s ease',
+    textAlign: 'center',
     backgroundColor: 'white',
+    color: '#374151',
+    fontWeight: 'bold',
+    transition: 'opacity 0.2s, transform 0.1s, box-shadow 0.2s',
+    display: 'flex',
+    flexDirection: 'column',
+    alignItems: 'center',
+    gap: '0.25rem',
+    minHeight: '70px',
     position: 'relative',
+    margin: '2px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05)',
     ':hover': {
-      backgroundColor: '#f9fafb',
-      borderColor: '#d1d5db',
-    },
-    ':hover .delete-button': {
-      opacity: 1,
+      transform: 'scale(1.05)',
+      boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1)',
     },
   },
   elementThumbnail: {
-    width: '60px',
-    height: '60px',
+    width: '80px',
+    height: '50px',
     objectFit: 'cover',
     borderRadius: '4px',
-    border: '1px solid #e5e7eb',
   },
   elementPlaceholder: {
     width: '60px',
@@ -6630,13 +6792,13 @@ const styles = {
     position: 'absolute',
     top: '4px',
     right: '4px',
-    backgroundColor: '#ef4444',
+    backgroundColor: '#e3e3e3ff',
     color: 'white',
     border: 'none',
     borderRadius: '50%',
     width: '16px',
     height: '16px',
-    fontSize: '10px',
+    fontSize: '13px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
