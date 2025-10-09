@@ -221,7 +221,17 @@ const CreateEvent = () => {
       }
       
       if (createEvent.fulfilled.match(result) || updateEvent.fulfilled.match(result)) {
-        navigate('/dashboard');
+        if (isEditing) {
+          navigate(`/events/${id}`);
+        } else {
+          // For new events, we need the event ID from the result
+          const eventId = result.payload?.id || result.payload?.event?.id;
+          if (eventId) {
+            navigate(`/events/${eventId}`);
+          } else {
+            navigate('/dashboard');
+          }
+        }
       }
     } catch (error) {
       console.error('Error saving event:', error);
@@ -446,7 +456,7 @@ const CreateEvent = () => {
             <div style={styles.formActions}>
               <button 
                 type="button"
-                onClick={() => navigate('/dashboard')}
+                onClick={() => navigate(isEditing ? `/events/${id}` : '/dashboard')}
                 className="btn btn-cancel"
               >
                 Cancel

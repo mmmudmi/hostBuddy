@@ -432,7 +432,7 @@
 
 .btn-primary {
   background-color: #000000;
-  border-radius: 8px;
+  border-radius: 10px;
   color: white;
 }
 
@@ -471,24 +471,6 @@
   border: 1.5px solid #da2222;
   color: #da2222;
   background-color: #ffffff;
-}
-
-.btn-purple {
-  background-color: #5a35d5;
-  color: #ffffff;
-  padding: 0.5rem 0.6rem;
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 14px;
-  font-weight: 500;
-  border: 1.5px solid #5a35d5;
-  transition: all 0.2s ease;
-  user-select: none;
-}
-
-.btn-purple:hover {
-  background-color: rgb(74, 21, 189);
-  border: 1.5px solid rgb(74, 21, 189);
 }
 
 .btn-upload {

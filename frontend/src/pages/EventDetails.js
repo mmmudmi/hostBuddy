@@ -224,7 +224,7 @@ const EventDetails = () => {
               <div style={styles.actionButtons}>
                 <Link 
                   to={`/events/${id}/layout`}
-                  className="btn btn-purple"
+                  className="btn btn-primary"
                   style={styles.actionButton}
                 >
                   <i class="fa-solid fa-pen-ruler" style={{ marginRight: '0.5rem' }}></i>
