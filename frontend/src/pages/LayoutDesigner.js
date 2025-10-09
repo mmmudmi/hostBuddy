@@ -21,22 +21,79 @@ const ImageElement = ({ element, shapeProps, onDblClick, onDblTap }) => {
   const imageRef = React.useRef(null);
   
   React.useEffect(() => {
-    if (element.imageData) {
-      const img = new window.Image();
-      img.onload = () => {
-        setImageElement(img);
-      };
-      img.onerror = () => {
-        console.warn('Failed to load image:', element.imageData?.substring(0, 50) + '...');
+    console.log('ImageElement useEffect triggered for element:', element.id, 'instanceId:', element.instanceId);
+    
+    // Prioritize base64 data over URLs for now (until S3 is properly configured)
+    const imageSource = element.imageData || element.imageUrl;
+    console.log('ImageElement loading:', {
+      elementId: element.id,
+      instanceId: element.instanceId,
+      elementType: element.type,
+      hasImageUrl: !!element.imageUrl,
+      hasImageData: !!element.imageData,
+      imageSourceLength: imageSource?.length,
+      imageSourceStart: imageSource?.substring(0, 100),
+      imageSourceType: imageSource?.startsWith('data:') ? 'base64' : imageSource?.startsWith('http') ? 'url' : 'unknown'
+    });
+    
+      if (imageSource) {
+        console.log('Creating new Image object for element:', element.id, 'instanceId:', element.instanceId);
+        const img = new window.Image();
+        
+        // Add a unique identifier to the Image object to help track it
+        img._elementId = element.id;
+        img._instanceId = element.instanceId || element.id;      // Add crossOrigin for S3 images to handle CORS
+      if (!imageSource.startsWith('data:')) {
+        img.crossOrigin = 'anonymous';
+        console.log('Set crossOrigin for non-base64 image:', element.id);
+      }
+      
+        img.onload = () => {
+          console.log('✅ Image loaded successfully for element:', element.id, 'instanceId:', element.instanceId, {
+            naturalWidth: img.naturalWidth,
+            naturalHeight: img.naturalHeight,
+            complete: img.complete,
+            imageId: img._elementId,
+            imageInstanceId: img._instanceId
+          });
+          setImageElement(img);
+          // Force Konva layer to redraw when image loads
+          if (imageRef.current) {
+            console.log('Forcing layer redraw for element:', element.id, 'instanceId:', element.instanceId);
+            imageRef.current.getLayer()?.batchDraw();
+          }
+        };
+        
+        img.onerror = (error) => {
+          console.error('❌ Failed to load image for element:', element.id, 'instanceId:', element.instanceId, {
+          error: error,
+          imageSource: imageSource?.substring(0, 200) + '...',
+          imageSourceType: imageSource?.startsWith('data:') ? 'base64' : 'url',
+          errorEvent: error,
+          imgSrc: img.src?.substring(0, 200) + '...'
+        });
         setImageElement(null);
       };
-      img.src = element.imageData;
-    }
-    
-    return () => {
+      
+        console.log('Setting img.src for element:', element.id, 'instanceId:', element.instanceId);
+        img.src = imageSource;
+        
+      } else {
+        console.warn('No image source found for element:', element.id, 'instanceId:', element.instanceId, {
+          element: element
+        });
+        setImageElement(null);
+      }    return () => {
       setImageElement(null);
     };
-  }, [element.imageData]);
+  }, [element.imageUrl, element.imageData, element.id, element.instanceId]);
+
+  // Force redraw when image element changes
+  React.useEffect(() => {
+    if (imageRef.current && imageElement) {
+      imageRef.current.getLayer()?.batchDraw();
+    }
+  }, [imageElement]);
   
   return imageElement ? (
     <Image
@@ -47,13 +104,13 @@ const ImageElement = ({ element, shapeProps, onDblClick, onDblTap }) => {
       onDblTap={onDblTap}
     />
   ) : (
-    // Placeholder while image loads - use transparent fill
+    // Placeholder while image loads - use transparent fill with debug info
     <Rect
       {...shapeProps}
       ref={imageRef}
-      fill="transparent"
-      stroke="#d1d5db"
-      strokeWidth={1}
+      fill="rgba(255, 0, 0, 0.1)" // Slight red tint for debugging
+      stroke="#ff0000"
+      strokeWidth={2}
       dash={[5, 5]} // Dashed border to indicate loading
     />
   );
@@ -65,22 +122,58 @@ const ChildImageElement = ({ child, childProps }) => {
   const childImageRef = React.useRef(null);
   
   React.useEffect(() => {
-    if (child.imageData) {
+    // Prioritize base64 data over URLs for now (until S3 is properly configured)
+    const imageSource = child.imageData || child.imageUrl;
+    console.log('ChildImageElement loading:', {
+      childId: child.id,
+      instanceId: child.instanceId,
+      childType: child.type,
+      hasImageUrl: !!child.imageUrl,
+      hasImageData: !!child.imageData,
+      imageSourceLength: imageSource?.length,
+      imageSourceStart: imageSource?.substring(0, 100)
+    });
+    
+    if (imageSource) {
       const img = new window.Image();
+      // Add crossOrigin for S3 images to handle CORS
+      if (!imageSource.startsWith('data:')) {
+        img.crossOrigin = 'anonymous';
+      }
       img.onload = () => {
+        console.log('Child image loaded successfully for:', child.id);
         setChildImageElement(img);
+        // Force Konva layer to redraw when child image loads
+        if (childImageRef.current) {
+          childImageRef.current.getLayer()?.batchDraw();
+        }
       };
-      img.onerror = () => {
-        console.warn('Failed to load child image:', child.imageData?.substring(0, 50) + '...');
+      img.onerror = (error) => {
+        console.error('Failed to load child image for:', child.id, {
+          error: error,
+          imageSource: imageSource,
+          imageSourceType: imageSource?.startsWith('data:') ? 'base64' : 'url',
+          errorEvent: error
+        });
         setChildImageElement(null);
       };
-      img.src = child.imageData;
+      img.src = imageSource;
+    } else {
+      console.warn('No image source found for child:', child.id);
+      setChildImageElement(null);
     }
     
     return () => {
       setChildImageElement(null);
     };
-  }, [child.imageData]);
+  }, [child.imageUrl, child.imageData, child.id, child.instanceId]);
+
+  // Force redraw when child image element changes
+  React.useEffect(() => {
+    if (childImageRef.current && childImageElement) {
+      childImageRef.current.getLayer()?.batchDraw();
+    }
+  }, [childImageElement]);
   
   return childImageElement ? (
     <Image {...childProps} ref={childImageRef} image={childImageElement} />
@@ -90,6 +183,14 @@ const ChildImageElement = ({ child, childProps }) => {
 };
 
 const LayoutDesigner = () => {
+  // Create a more robust unique ID generator with persistent counter
+  const idCounterRef = useRef(0);
+  const generateUniqueId = useCallback((prefix = 'element') => {
+    const timestamp = Date.now();
+    const counter = ++idCounterRef.current;
+    const random = Math.random().toString(36).substr(2, 9);
+    return `${prefix}_${timestamp}_${counter}_${random}`;
+  }, []);
   const { id } = useParams();
   const dispatch = useDispatch();
   const navigate = useNavigate();
@@ -238,15 +339,23 @@ const LayoutDesigner = () => {
   const loadCustomElements = useCallback(async () => {
     try {
       setIsLoadingCustomElements(true);
-      console.log('Loading custom elements with filter:', customElementsFilter);
       const result = await userElementsAPI.getUserElements(customElementsFilter);
-      console.log('Custom elements API result:', result);
+      result.elements.forEach((element, index) => {
+        // Check for image elements specifically
+        if (element.element_data?.type === 'image') {
+          console.log(`Image element ${index} data:`, {
+            hasImageUrl: !!element.element_data.imageUrl,
+            hasImageData: !!element.element_data.imageData,
+            imageUrlPreview: element.element_data.imageUrl?.substring(0, 50),
+            imageDataLength: element.element_data.imageData?.length
+          });
+        }
+      });
+      
       setCustomElements(result.elements);
     } catch (error) {
-      console.warn('Failed to load custom elements:', error);
       // Fallback to localStorage for custom elements
       const saved = JSON.parse(localStorage.getItem('customElements') || '[]');
-      console.log('Using fallback custom elements from localStorage:', saved);
       setCustomElements(saved);
     } finally {
       setIsLoadingCustomElements(false);
@@ -266,12 +375,80 @@ const LayoutDesigner = () => {
     const isSingleGrouped = elementsToSave.length === 1 && 
                            selectedElements.some(el => el.type === 'group' || el.isGrouped || el.isMerged);
 
-    // Allow saving any selected elements (single or multiple)
-    console.log('Saving', elementsToSave.length, 'element(s) as custom element');
-
-    // Don't generate canvas thumbnail - we'll use actual Konva elements
-    const thumbnail = null;
-    console.log('Using live Konva preview instead of canvas thumbnail for', selectedElements.length, 'elements');
+    // Generate thumbnail for images
+    const generateThumbnail = async () => {
+      // Check if any of the selected elements are images
+      const imageElements = selectedElements.filter(el => el.type === 'image' && (el.imageData || el.imageUrl));
+      
+      if (imageElements.length > 0) {
+        // For single image, use the image source directly as thumbnail (prioritize base64)
+        if (imageElements.length === 1 && selectedElements.length === 1) {
+          return imageElements[0].imageData || imageElements[0].imageUrl;
+        }
+        
+        // For multiple elements with images, create a composite thumbnail
+        try {
+          const thumbnailCanvas = document.createElement('canvas');
+          thumbnailCanvas.width = 120;
+          thumbnailCanvas.height = 120;
+          const ctx = thumbnailCanvas.getContext('2d');
+          
+          // Calculate bounds of all elements
+          let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
+          selectedElements.forEach(el => {
+            minX = Math.min(minX, el.x);
+            minY = Math.min(minY, el.y);
+            maxX = Math.max(maxX, el.x + el.width);
+            maxY = Math.max(maxY, el.y + el.height);
+          });
+          
+          const totalWidth = maxX - minX;
+          const totalHeight = maxY - minY;
+          const scale = Math.min(120 / totalWidth, 120 / totalHeight, 1);
+          
+          // Center the content
+          const offsetX = (120 - totalWidth * scale) / 2;
+          const offsetY = (120 - totalHeight * scale) / 2;
+          
+          // Render images
+          for (let i = 0; i < imageElements.length; i++) {
+            const imageEl = imageElements[i];
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            
+            // Capture variables outside closure to avoid ESLint warning
+            const capturedMinX = minX;
+            const capturedMinY = minY;
+            
+            await new Promise((resolve, reject) => {
+              img.onload = () => {
+                const x = offsetX + (imageEl.x - capturedMinX) * scale;
+                const y = offsetY + (imageEl.y - capturedMinY) * scale;
+                const width = imageEl.width * scale;
+                const height = imageEl.height * scale;
+                
+                ctx.globalAlpha = imageEl.opacity !== undefined ? imageEl.opacity : 1;
+                ctx.drawImage(img, x, y, width, height);
+                ctx.globalAlpha = 1;
+                resolve();
+              };
+              img.onerror = reject;
+              img.src = imageEl.imageData || imageEl.imageUrl;
+            });
+          }
+          
+          return thumbnailCanvas.toDataURL('image/jpeg', 0.8);
+        } catch (error) {
+          console.warn('Failed to generate composite thumbnail:', error);
+          return null;
+        }
+      }
+      
+      return null;
+    };
+    
+    const thumbnail = await generateThumbnail();
+    console.log('Generated thumbnail for custom element:', thumbnail ? 'Yes' : 'No (using live Konva preview)');
 
     const elementData = {
       name,
@@ -297,7 +474,7 @@ const LayoutDesigner = () => {
       const saved = JSON.parse(localStorage.getItem('customElements') || '[]');
       const newElement = {
         ...elementData,
-        element_id: Date.now(),
+        element_id: generateUniqueId('custom_element'),
         user_id: 1,
         usage_count: 0,
         created_at: new Date().toISOString(),
@@ -445,16 +622,121 @@ const LayoutDesigner = () => {
     return combinedPath.trim();
   }, []);
 
+  // Grid snapping functions
+  const snapToGridPosition = useCallback((x, y) => {
+    if (!snapToGrid) return { x, y };
+    
+    const snappedX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
+    const snappedY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
+    
+    return { x: snappedX, y: snappedY };
+  }, [snapToGrid, GRID_SIZE_X, GRID_SIZE_Y]);
+
+  const shouldSnapToPosition = useCallback((currentX, currentY, targetX, targetY) => {
+    if (!snapToGrid) return false;
+    
+    const deltaX = Math.abs(currentX - targetX);
+    const deltaY = Math.abs(currentY - targetY);
+    
+    return deltaX <= SNAP_THRESHOLD && deltaY <= SNAP_THRESHOLD;
+  }, [snapToGrid, SNAP_THRESHOLD]);
+
+  const findNearestGridPosition = useCallback((x, y) => {
+    const nearbyPositions = [];
+    
+    // Calculate nearby grid intersections
+    const gridX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
+    const gridY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
+    
+    // Check nearby grid points
+    for (let offsetX = -1; offsetX <= 1; offsetX++) {
+      for (let offsetY = -1; offsetY <= 1; offsetY++) {
+        const snapX = gridX + (offsetX * GRID_SIZE_X);
+        const snapY = gridY + (offsetY * GRID_SIZE_Y);
+        
+        if (shouldSnapToPosition(x, y, snapX, snapY)) {
+          nearbyPositions.push({ x: snapX, y: snapY });
+        }
+      }
+    }
+    
+    // Return closest position or original if none found
+    if (nearbyPositions.length > 0) {
+      return nearbyPositions.reduce((closest, pos) => {
+        const currentDist = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
+        const closestDist = Math.sqrt(Math.pow(x - closest.x, 2) + Math.pow(y - closest.y, 2));
+        return currentDist < closestDist ? pos : closest;
+      });
+    }
+    
+    return { x, y };
+  }, [GRID_SIZE_X, GRID_SIZE_Y, shouldSnapToPosition]);
+
+  // Get optimal placement position for new elements
+  const getOptimalPlacementPosition = useCallback(() => {
+    // Find a good starting position for new elements
+    const spacing = Math.max(GRID_SIZE_X, GRID_SIZE_Y) * 2;
+    let startX = GRID_SIZE_X * 5; // Start 5 grid units from left
+    let startY = GRID_SIZE_Y * 5; // Start 5 grid units from top
+    
+    // Check if position is occupied by existing elements
+    const isPositionOccupied = (x, y, width = 60, height = 60) => {
+      return layoutElements.some(element => {
+        const buffer = 20; // Minimum distance between elements
+        return (
+          x < element.x + element.width + buffer &&
+          x + width + buffer > element.x &&
+          y < element.y + element.height + buffer &&
+          y + height + buffer > element.y
+        );
+      });
+    };
+    
+    // Find next available position
+    while (isPositionOccupied(startX, startY)) {
+      startX += spacing;
+      if (startX > 600) { // If too far right, move to next row
+        startX = GRID_SIZE_X * 5;
+        startY += spacing;
+      }
+      if (startY > 400) { // If too far down, reset to top
+        startY = GRID_SIZE_Y * 5;
+        break;
+      }
+    }
+    
+    return snapToGridPosition(startX, startY);
+  }, [layoutElements, snapToGridPosition, GRID_SIZE_X, GRID_SIZE_Y]);
+
   // Add custom element to layout
   const addCustomElementToLayout = useCallback(async (customElement) => {
     if (!customElement.element_data) return;
 
-    try {
-      // Increment usage count
-      await userElementsAPI.incrementElementUsage(customElement.element_id);
-    } catch (error) {
-      console.warn('Failed to increment usage count:', error);
+    
+    // Debug: Check image data specifically
+    if (customElement.element_data.type === 'image') {
+      console.log('Image element data:', {
+        imageUrl: customElement.element_data.imageUrl,
+        imageData: customElement.element_data.imageData,
+        hasImageData: !!customElement.element_data.imageData,
+        imageDataLength: customElement.element_data.imageData ? customElement.element_data.imageData.length : 0
+      });
+    } else if (customElement.element_data.children) {
+      console.log('Group/merged element - checking children for images...');
+      customElement.element_data.children.forEach((child, index) => {
+        if (child.type === 'image') {
+          console.log(`Child ${index} image data:`, {
+            imageUrl: child.imageUrl,
+            imageData: child.imageData,
+            hasImageData: !!child.imageData,
+            imageDataLength: child.imageData ? child.imageData.length : 0
+          });
+        }
+      });
     }
+
+    // Note: Usage count tracking is not implemented in the backend yet
+    // TODO: Add usage_count field to UserElement model and implement increment endpoint
 
     if (customElement.element_data.type === 'group') {
       const elements = customElement.element_data.elements || [];
@@ -464,16 +746,27 @@ const LayoutDesigner = () => {
       // Special case: if it's a single merged element, restore it directly
       if (wasOriginallyMerged && elements.length === 1 && elements[0].type === 'merged') {
         const originalMerged = elements[0];
+        
+        // Get optimal position using auto-alignment
+        const optimalPosition = getOptimalPlacementPosition();
+        
         const restoredMerged = {
           ...originalMerged,
-          id: `merged_${Date.now()}`,
-          x: 100, // Base position
-          y: 100, // Base position
+          id: generateUniqueId('merged'),
+          x: optimalPosition.x, // Use optimal position
+          y: optimalPosition.y, // Use optimal position
           // Give new IDs to children to avoid conflicts
-          children: originalMerged.children ? originalMerged.children.map(child => ({
-            ...child,
-            id: `${Date.now()}-${Math.random()}`
-          })) : []
+          children: originalMerged.children ? originalMerged.children.map((child, index) => {
+            const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanChild } = child;
+            return {
+              ...cleanChild,
+              id: generateUniqueId(`child_${index}`),
+              instanceId: generateUniqueId(`child_instance_${index}`),
+              // Preserve image data for image elements (both S3 URLs and base64 for backwards compatibility)
+              imageUrl: child.type === 'image' ? child.imageUrl : undefined,
+              imageData: child.type === 'image' ? child.imageData : undefined,
+            };
+          }) : []
         };
         
         setLayoutElements(prev => [...prev, restoredMerged]);
@@ -481,28 +774,92 @@ const LayoutDesigner = () => {
         return;
       }
       
+      // Special case: if it's a single element of any type that got saved as a group, restore it as a single element
+      if (elements.length === 1 && elements[0].type !== 'group' && elements[0].type !== 'merged') {
+        console.log('Restoring single element from group wrapper:', elements[0].type);
+        const singleElement = elements[0];
+        
+        // Get optimal position using auto-alignment
+        const optimalPosition = getOptimalPlacementPosition();
+        
+        // Create a unique timestamp for this instance
+        const uniqueId = generateUniqueId('single');
+        
+        // CRITICAL: Remove id from singleElement before spreading to prevent ID conflicts
+        const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanSingleElement } = singleElement;
+        
+        const newElement = {
+          ...cleanSingleElement,
+          // Always generate fresh IDs to ensure uniqueness
+          id: uniqueId,
+          instanceId: generateUniqueId('single_instance'),
+          // Use optimal positioning
+          x: optimalPosition.x,
+          y: optimalPosition.y,
+          // Preserve image data for image elements
+          imageUrl: singleElement.type === 'image' ? singleElement.imageUrl : undefined,
+          imageData: singleElement.type === 'image' ? singleElement.imageData : undefined,
+        };
+        
+        setLayoutElements(prev => [...prev, newElement]);
+        setHasUnsavedChanges(true);
+        
+        // Auto-select the newly added element
+        setSelectedId(newElement.id);
+        setSelectedIds([]);
+        setIsMultiSelect(false);
+        return;
+      }
+      
       // Special case: if it's a single grouped element, restore it directly
       if (!wasOriginallyMerged && elements.length === 1 && elements[0].type === 'group') {
         const originalGroup = elements[0];
+        
+        // Get optimal position using auto-alignment
+        const optimalPosition = getOptimalPlacementPosition();
+        
         const restoredGroup = {
           ...originalGroup,
-          id: `group_${Date.now()}`,
-          x: 100, // Base position
-          y: 100, // Base position
+          id: generateUniqueId('group'),
+          x: optimalPosition.x, // Use optimal position
+          y: optimalPosition.y, // Use optimal position
           // Give new IDs to children to avoid conflicts
-          children: originalGroup.children ? originalGroup.children.map(child => ({
-            ...child,
-            id: `${Date.now()}-${Math.random()}`
-          })) : []
+          children: originalGroup.children ? originalGroup.children.map((child, index) => {
+            const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanChild } = child;
+            return {
+              ...cleanChild,
+              id: generateUniqueId(`group_child_${index}`),
+              instanceId: generateUniqueId(`group_child_instance_${index}`),
+              // Preserve image data for image elements (both S3 URLs and base64 for backwards compatibility)
+              imageUrl: child.type === 'image' ? child.imageUrl : undefined,
+              imageData: child.type === 'image' ? child.imageData : undefined,
+            };
+          }) : []
         };
+        
+        console.log('Adding restored group element:', {
+          id: restoredGroup.id,
+          type: restoredGroup.type,
+          childCount: restoredGroup.children ? restoredGroup.children.length : 0,
+          position: { x: restoredGroup.x, y: restoredGroup.y },
+          children: restoredGroup.children ? restoredGroup.children.map(child => ({
+            id: child.id,
+            type: child.type,
+            instanceId: child.instanceId,
+            hasImageUrl: !!child.imageUrl,
+            hasImageData: !!child.imageData
+          })) : []
+        });
         
         setLayoutElements(prev => [...prev, restoredGroup]);
         setHasUnsavedChanges(true);
         return;
       }
       
-      const baseX = 100; // Base position
-      const baseY = 100;
+      // Get optimal position using auto-alignment
+      const optimalPosition = getOptimalPlacementPosition();
+      const baseX = optimalPosition.x; // Use optimal position
+      const baseY = optimalPosition.y; // Use optimal position
       
       // Calculate bounding box for all elements
       let minX = Infinity, minY = Infinity, maxX = -Infinity, maxY = -Infinity;
@@ -517,7 +874,7 @@ const LayoutDesigner = () => {
       
       if (wasOriginallyMerged) {
         // Create merged element if it was originally merged
-        const mergedId = `merged_${Date.now()}`;
+        const mergedId = generateUniqueId('merged');
         
         // Combine text from text elements
         const combinedText = elements
@@ -547,21 +904,42 @@ const LayoutDesigner = () => {
           borderWidth: borderWidth,
           borderColor: borderColor,
           outlinePath: outlinePath,
-          children: elements.map(el => ({
-            ...el,
-            id: `${Date.now()}-${Math.random()}`,
-            x: el.x - minX,
-            y: el.y - minY,
-            originalText: el.text,
-            text: el.type === 'text' ? el.text : null,
-          })),
+          children: elements.map((el, index) => {
+            const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanEl } = el;
+            return {
+              ...cleanEl,
+              id: generateUniqueId(`merged_child_${index}`),
+              instanceId: generateUniqueId(`merged_child_instance_${index}`),
+              x: el.x - minX,
+              y: el.y - minY,
+              originalText: el.text,
+              text: el.type === 'text' ? el.text : null,
+              // Preserve image data for image elements (both S3 URLs and base64 for backwards compatibility)
+              imageUrl: el.type === 'image' ? el.imageUrl : undefined,
+              imageData: el.type === 'image' ? el.imageData : undefined,
+            };
+          }),
           isMerged: true,
         };
+        
+        console.log('Adding new merged element:', {
+          id: mergedElement.id,
+          type: mergedElement.type,
+          childCount: mergedElement.children.length,
+          position: { x: mergedElement.x, y: mergedElement.y },
+          children: mergedElement.children.map(child => ({
+            id: child.id,
+            type: child.type,
+            instanceId: child.instanceId,
+            hasImageUrl: !!child.imageUrl,
+            hasImageData: !!child.imageData
+          }))
+        });
         
         setLayoutElements(prev => [...prev, mergedElement]);
       } else {
         // Create group element if it was originally just selected elements
-        const groupId = `group_${Date.now()}`;
+        const groupId = generateUniqueId('group');
         
         const groupElement = {
           id: groupId,
@@ -575,16 +953,37 @@ const LayoutDesigner = () => {
           rotation: 0,
           borderWidth: 0,
           borderColor: 'transparent',
-          children: elements.map(el => ({
-            ...el,
-            id: `${Date.now()}-${Math.random()}`,
-            x: el.x - minX,
-            y: el.y - minY,
-            originalText: el.text,
-            text: el.type === 'text' ? el.text : null,
-          })),
+          children: elements.map((el, index) => {
+            const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanEl } = el;
+            return {
+              ...cleanEl,
+              id: generateUniqueId(`group_child_${index}`),
+              instanceId: generateUniqueId(`group_child_instance_${index}`),
+              x: el.x - minX,
+              y: el.y - minY,
+              originalText: el.text,
+              text: el.type === 'text' ? el.text : null,
+              // Preserve image data for image elements (both S3 URLs and base64 for backwards compatibility)
+              imageUrl: el.type === 'image' ? el.imageUrl : undefined,
+              imageData: el.type === 'image' ? el.imageData : undefined,
+            };
+          }),
           isGrouped: true,
         };
+        
+        console.log('Adding new group element:', {
+          id: groupElement.id,
+          type: groupElement.type,
+          childCount: groupElement.children.length,
+          position: { x: groupElement.x, y: groupElement.y },
+          children: groupElement.children.map(child => ({
+            id: child.id,
+            type: child.type,
+            instanceId: child.instanceId,
+            hasImageUrl: !!child.imageUrl,
+            hasImageData: !!child.imageData
+          }))
+        });
         
         setLayoutElements(prev => [...prev, groupElement]);
       }
@@ -593,16 +992,88 @@ const LayoutDesigner = () => {
     } else {
       // Add single element
       const elementData = customElement.element_data;
+      
+      console.log('🔍 DEBUG: Custom element data before processing:', {
+        customElementId: customElement.element_id,
+        elementDataType: elementData.type,
+        elementDataKeys: Object.keys(elementData),
+        elementDataId: elementData.id,
+        hasElementsArray: !!elementData.elements,
+        elementsLength: elementData.elements ? elementData.elements.length : 0,
+        fullElementData: elementData,
+        customElementStructure: {
+          hasElementData: !!customElement.element_data,
+          elementDataType: customElement.element_data?.type,
+          isGroup: customElement.element_data?.type === 'group'
+        }
+      });
+      
+      // Get optimal position using auto-alignment
+      const optimalPosition = getOptimalPlacementPosition();
+      
+      // Create a unique ID for this instance
+      const uniqueId = generateUniqueId('single');
+      
+      // CRITICAL: Remove id from elementData before spreading to prevent ID conflicts
+      const { id: _ignoredId, instanceId: _ignoredInstanceId, ...cleanElementData } = elementData;
+      
       const newElement = {
-        id: `${Date.now()}-${Math.random()}`,
-        ...elementData,
-        x: 100,
-        y: 100
+        ...cleanElementData,
+        // Always generate fresh IDs to ensure uniqueness
+        id: uniqueId,
+        instanceId: generateUniqueId('single_instance'),
+        // Use optimal positioning
+        x: optimalPosition.x,
+        y: optimalPosition.y,
+        // Preserve image data for image elements (both S3 URLs and base64 for backwards compatibility)
+        // Create completely independent copies for image elements
+        imageUrl: elementData.type === 'image' ? elementData.imageUrl : undefined,
+        imageData: elementData.type === 'image' ? elementData.imageData : undefined,
       };
-      setLayoutElements(prev => [...prev, newElement]);
+      
+      console.log('🔍 DEBUG: New element after creation:', {
+        newElementId: newElement.id,
+        newElementInstanceId: newElement.instanceId,
+        newElementType: newElement.type,
+        uniqueIdGenerated: uniqueId,
+        idMatchesGenerated: newElement.id === uniqueId,
+        originalElementDataId: elementData.id,
+        idWasExcludedFromSpread: true,
+        hasCleanData: !newElement.hasOwnProperty('_ignoredId'),
+        allKeys: Object.keys(newElement)
+      });
+      
+      console.log('Adding new single element:', {
+        id: newElement.id,
+        instanceId: newElement.instanceId,
+        type: newElement.type,
+        hasImageUrl: !!newElement.imageUrl,
+        hasImageData: !!newElement.imageData,
+        position: { x: newElement.x, y: newElement.y },
+        originalElementData: {
+          id: elementData.id,
+          type: elementData.type,
+          hasImageUrl: !!elementData.imageUrl,
+          hasImageData: !!elementData.imageData
+        }
+      });
+      setLayoutElements(prev => {
+        console.log('Current elements before adding:', prev.map(el => ({ 
+          id: el.id, 
+          type: el.type, 
+          instanceId: el.instanceId 
+        })));
+        const newElements = [...prev, newElement];
+        console.log('Elements after adding:', newElements.map(el => ({ 
+          id: el.id, 
+          type: el.type, 
+          instanceId: el.instanceId 
+        })));
+        return newElements;
+      });
       setHasUnsavedChanges(true);
     }
-  }, [calculateMergedOutlinePath]); // getElementVisualBounds is stable and doesn't need to be in deps
+  }, [calculateMergedOutlinePath, getOptimalPlacementPosition]); // getElementVisualBounds is stable and doesn't need to be in deps
 
   // Delete custom element
   const deleteCustomElement = useCallback(async (elementId) => {
@@ -700,7 +1171,7 @@ const LayoutDesigner = () => {
     const optimalPosition = getOptimalPlacementPosition();
     
     const newElement = {
-      id: Date.now().toString(),
+      id: generateUniqueId('element'),
       type: elementType.type,
       x: optimalPosition.x,
       y: optimalPosition.y,
@@ -709,6 +1180,7 @@ const LayoutDesigner = () => {
       color: elementType.color,
       label: elementType.label,
       rotation: 0,
+      instanceId: generateUniqueId('instance'),
     };
     
     // Add special properties for text elements
@@ -747,7 +1219,7 @@ const LayoutDesigner = () => {
   };
 
   // Image handling functions
-  const handleImageUpload = (event) => {
+  const handleImageUpload = async (event) => {
     const file = event.target.files[0];
     if (!file) return;
 
@@ -757,6 +1229,8 @@ const LayoutDesigner = () => {
       return;
     }
 
+    // For now, use base64 to ensure images work properly
+    // TODO: Switch back to S3 when MinIO server is properly configured
     const reader = new FileReader();
     reader.onload = (e) => {
       const img = new window.Image();
@@ -777,7 +1251,7 @@ const LayoutDesigner = () => {
         const optimalPosition = getOptimalPlacementPosition();
         
         const newElement = {
-          id: Date.now().toString(),
+          id: generateUniqueId('image'),
           type: 'image',
           x: optimalPosition.x,
           y: optimalPosition.y,
@@ -786,7 +1260,8 @@ const LayoutDesigner = () => {
           color: '#9ca3af',
           label: 'Image',
           rotation: 0,
-          imageData: e.target.result, // base64 data
+          imageData: e.target.result, // Use base64 for now to ensure it works
+          instanceId: generateUniqueId('image_instance'),
           originalWidth: img.width,
           originalHeight: img.height,
           aspectRatio: aspectRatio,
@@ -807,6 +1282,12 @@ const LayoutDesigner = () => {
         setHoveredBorderWidth(null);
         setHoveredBorderColor(null);
       };
+      
+      img.onerror = () => {
+        console.error('Failed to load uploaded image');
+        alert('Failed to load the uploaded image.');
+      };
+      
       img.src = e.target.result;
     };
     reader.readAsDataURL(file);
@@ -816,13 +1297,6 @@ const LayoutDesigner = () => {
   };
 
   const handleSelect = (id, event) => {
-    console.log('=== ELEMENT SELECTION DEBUG ===');
-    console.log('Selecting element ID:', id);
-    console.log('Event:', event);
-    console.log('Current selectedId:', selectedId);
-    console.log('Current isMultiSelect:', isMultiSelect);
-    console.log('Current selectedIds:', selectedIds);
-    
     const isShift = event?.shiftKey;
     
     if (isShift) {
@@ -1072,91 +1546,6 @@ const LayoutDesigner = () => {
     );
     setHasUnsavedChanges(true);
   }, []);
-
-  // Snap-to-grid utility functions
-  const snapToGridPosition = useCallback((x, y) => {
-    if (!snapToGrid) return { x, y };
-    
-    const snappedX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
-    const snappedY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
-    
-    return { x: snappedX, y: snappedY };
-  }, [snapToGrid, GRID_SIZE_X, GRID_SIZE_Y]);
-
-  const shouldSnapToPosition = useCallback((currentX, currentY, targetX, targetY) => {
-    if (!snapToGrid) return false;
-    
-    const deltaX = Math.abs(currentX - targetX);
-    const deltaY = Math.abs(currentY - targetY);
-    
-    return deltaX <= SNAP_THRESHOLD && deltaY <= SNAP_THRESHOLD;
-  }, [snapToGrid, SNAP_THRESHOLD]);
-
-  const findNearestGridPosition = useCallback((x, y) => {
-    const nearbyPositions = [];
-    
-    // Calculate nearby grid intersections
-    const gridX = Math.round(x / GRID_SIZE_X) * GRID_SIZE_X;
-    const gridY = Math.round(y / GRID_SIZE_Y) * GRID_SIZE_Y;
-    
-    // Check nearby grid points
-    for (let offsetX = -1; offsetX <= 1; offsetX++) {
-      for (let offsetY = -1; offsetY <= 1; offsetY++) {
-        const snapX = gridX + (offsetX * GRID_SIZE_X);
-        const snapY = gridY + (offsetY * GRID_SIZE_Y);
-        
-        if (shouldSnapToPosition(x, y, snapX, snapY)) {
-          nearbyPositions.push({ x: snapX, y: snapY });
-        }
-      }
-    }
-    
-    // Return closest position or original if none found
-    if (nearbyPositions.length > 0) {
-      return nearbyPositions.reduce((closest, pos) => {
-        const currentDist = Math.sqrt(Math.pow(x - pos.x, 2) + Math.pow(y - pos.y, 2));
-        const closestDist = Math.sqrt(Math.pow(x - closest.x, 2) + Math.pow(y - closest.y, 2));
-        return currentDist < closestDist ? pos : closest;
-      });
-    }
-    
-    return { x, y };
-  }, [GRID_SIZE_X, GRID_SIZE_Y, shouldSnapToPosition]);
-
-  const getOptimalPlacementPosition = useCallback(() => {
-    // Find a good starting position for new elements
-    const spacing = Math.max(GRID_SIZE_X, GRID_SIZE_Y) * 2;
-    let startX = GRID_SIZE_X * 5; // Start 5 grid units from left
-    let startY = GRID_SIZE_Y * 5; // Start 5 grid units from top
-    
-    // Check if position is occupied by existing elements
-    const isPositionOccupied = (x, y, width = 60, height = 60) => {
-      return layoutElements.some(element => {
-        const buffer = 20; // Minimum distance between elements
-        return (
-          x < element.x + element.width + buffer &&
-          x + width + buffer > element.x &&
-          y < element.y + element.height + buffer &&
-          y + height + buffer > element.y
-        );
-      });
-    };
-    
-    // Find next available position
-    while (isPositionOccupied(startX, startY)) {
-      startX += spacing;
-      if (startX > 600) { // If too far right, move to next row
-        startX = GRID_SIZE_X * 5;
-        startY += spacing;
-      }
-      if (startY > 400) { // If too far down, reset to top
-        startY = GRID_SIZE_Y * 5;
-        break;
-      }
-    }
-    
-    return snapToGridPosition(startX, startY);
-  }, [layoutElements, snapToGridPosition, GRID_SIZE_X, GRID_SIZE_Y]);
 
   // Start editing text
   const startTextEdit = useCallback((elementId, childElement = null) => {
@@ -1616,9 +2005,10 @@ const LayoutDesigner = () => {
     const offset = 20; // Offset for pasted elements
     const pastedElements = clipboard.map(element => ({
       ...element,
-      id: `${element.id}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+      id: generateUniqueId('pasted'),
       x: element.x + offset,
       y: element.y + offset,
+      instanceId: generateUniqueId('pasted_instance'),
     }));
     
     setLayoutElements(prev => [...prev, ...pastedElements]);
@@ -1662,7 +2052,7 @@ const LayoutDesigner = () => {
       maxY = Math.max(maxY, bounds.maxY);
     });
 
-    const groupId = `group_${Date.now()}`;
+    const groupId = generateUniqueId('group');
     const groupElement = {
       id: groupId,
       type: 'group',
@@ -1671,6 +2061,7 @@ const LayoutDesigner = () => {
       width: maxX - minX,
       height: maxY - minY,
       color: 'transparent',
+      instanceId: generateUniqueId('group_instance'),
       label: 'Group',
       rotation: 0,
       children: elementsToGroup.map(element => {
@@ -1719,9 +2110,10 @@ const LayoutDesigner = () => {
     // Convert children back to absolute coordinates
     const ungroupedElements = groupElement.children.map(child => ({
       ...child,
-      id: `${child.id}_${Date.now()}`, // Generate new ID to avoid conflicts
+      id: generateUniqueId('ungrouped'), // Generate new ID to avoid conflicts
       x: child.x + groupElement.x,
       y: child.y + groupElement.y,
+      instanceId: generateUniqueId('ungrouped_instance'),
     }));
 
     console.log('Ungrouped elements:', ungroupedElements);
@@ -1755,7 +2147,7 @@ const LayoutDesigner = () => {
       maxY = Math.max(maxY, bounds.maxY);
     });
 
-    const mergedId = `merged_${Date.now()}`;
+    const mergedId = generateUniqueId('merged');
     
     // Combine text only from text elements
     const combinedText = elementsToMerge
@@ -2028,13 +2420,14 @@ const LayoutDesigner = () => {
           // Create new duplicated elements keeping original type but adding number text
           const duplicatedElement = {
             ...originalElement,
-            id: `${originalElement.id}_duplicate_${Date.now()}_${i}_${Math.random().toString(36).substr(2, 9)}`,
+            id: generateUniqueId('duplicate'),
             x: scaledX,
             y: scaledY,
             width: scaledWidth,
             height: scaledHeight,
             text: label, // Add the number as text content displayed on the element
             fontSize: originalElement.fontSize || 16,
+            instanceId: generateUniqueId('duplicate_instance'),
           };
           
           console.log('Created duplicated element with text:', duplicatedElement);
@@ -2328,7 +2721,7 @@ const LayoutDesigner = () => {
         } else {
           // Create new layout in localStorage
           const newLayout = {
-            id: Date.now(),
+            id: generateUniqueId('layout'),
             ...layoutData,
             created_at: new Date().toISOString(),
             updated_at: new Date().toISOString()
@@ -2632,6 +3025,16 @@ const LayoutDesigner = () => {
     const isSelected = element.id === selectedId || selectedIds.includes(element.id);
     const isInTempGroup = selectedIds.includes(element.id) && selectedIds.length > 1;
     
+    console.log('renderShape called for element:', {
+      id: element.id,
+      instanceId: element.instanceId,
+      type: element.type,
+      isSelected: isSelected,
+      selectedId: selectedId,
+      selectedIds: selectedIds,
+      isInTempGroup: isInTempGroup
+    });
+    
     const handleDragStart = (e) => {
       if (isInTempGroup) {
         setIsDragging(true);
@@ -2883,7 +3286,16 @@ const LayoutDesigner = () => {
       onDragMove: handleDragMove,
       onDragEnd: handleDragEnd,
       onTransformEnd: handleTransformEnd,
-      onClick: (e) => handleSelect(element.id, e.evt),
+      onClick: (e) => {
+        console.log('Element clicked:', { 
+          id: element.id, 
+          instanceId: element.instanceId, 
+          type: element.type,
+          imageUrl: element.imageUrl ? element.imageUrl.substring(0, 50) + '...' : undefined,
+          imageData: element.imageData ? 'Has imageData' : undefined
+        });
+        handleSelect(element.id, e.evt);
+      },
       onTap: (e) => handleSelect(element.id, e.evt),
       rotation: element.rotation || 0,
       opacity: element.opacity !== undefined ? element.opacity : 1,
@@ -3883,7 +4295,6 @@ const LayoutDesigner = () => {
 
           {(selectedId || (isMultiSelect && selectedIds.length > 0)) && (
             <div data-prevent-deselect="true" style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              {console.log('CONTROLS VISIBLE:', { selectedId, isMultiSelect, selectedIdsLength: selectedIds.length })}
               {/* Combined Style Controls Dropdown */}
               <div style={{ position: 'relative', display: 'inline-block' }} data-style-dropdown data-prevent-deselect="true">
                 <button 
@@ -4711,6 +5122,9 @@ const LayoutDesigner = () => {
                                         return <Line {...props} points={[0, 0, scaledWidth, 0]} stroke={child.color || '#000000'} strokeWidth={Math.max((child.height || 2) * scale, 1)} fill={undefined} />;
                                       } else if (child.type === 'text') {
                                         return <Text {...props} text={(child.text || 'Text').substring(0, 8)} fontSize={Math.max((child.fontSize || 16) * scale, 8)} width={scaledWidth} height={scaledHeight} />;
+                                      } else if (child.type === 'image') {
+                                        // For image thumbnails, show a simple icon or placeholder
+                                        return <Text {...props} text="🖼️" fontSize={Math.min(scaledWidth, scaledHeight) * 0.8} width={scaledWidth} height={scaledHeight} align="center" verticalAlign="middle" fill={undefined} stroke="#9ca3af" strokeWidth={1} />;
                                       } else {
                                         // Default rectangle for square, rectangle, and unknown types
                                         return <Rect {...props} width={scaledWidth} height={scaledHeight} />;
@@ -4967,7 +5381,11 @@ const LayoutDesigner = () => {
               })()}
               
               {/* Layout elements */}
-              {layoutElements.map(renderShape)}
+              {layoutElements.map(element => (
+                <React.Fragment key={element.instanceId || element.id}>
+                  {renderShape(element)}
+                </React.Fragment>
+              ))}
               
               {/* Temporary group bounds */}
               {tempGroupBounds && (
@@ -6169,15 +6587,15 @@ const styles = {
     },
   },
   elementThumbnail: {
-    width: '40px',
-    height: '40px',
+    width: '60px',
+    height: '60px',
     objectFit: 'cover',
     borderRadius: '4px',
     border: '1px solid #e5e7eb',
   },
   elementPlaceholder: {
-    width: '40px',
-    height: '40px',
+    width: '60px',
+    height: '60px',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
