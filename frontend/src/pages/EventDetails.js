@@ -3,6 +3,7 @@ import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchEventById, deleteEvent, clearCurrentEvent } from '../store/eventSlice';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CustomizedModal from '../components/CustomizedModal';
 
 const EventDetails = () => {
   const { id } = useParams();
@@ -10,6 +11,7 @@ const EventDetails = () => {
   const dispatch = useDispatch();
   
   const { currentEvent, isLoading, error } = useSelector((state) => state.events);
+  const [confirmModal, setConfirmModal] = React.useState({ show: false, message: '', action: null });
 
   useEffect(() => {
     if (id) {
@@ -28,12 +30,17 @@ const EventDetails = () => {
   }, [dispatch, id, navigate]);
 
   const handleDeleteEvent = async () => {
-    if (window.confirm('Are you sure you want to delete this event? This action cannot be undone.')) {
-      const result = await dispatch(deleteEvent(parseInt(id)));
-      if (deleteEvent.fulfilled.match(result)) {
-        navigate('/dashboard');
+    setConfirmModal({
+      show: true,
+      message: 'Are you sure you want to delete this event? This action cannot be undone.',
+      action: async () => {
+        const result = await dispatch(deleteEvent(parseInt(id)));
+        if (deleteEvent.fulfilled.match(result)) {
+          navigate('/dashboard');
+        }
+        setConfirmModal({ show: false, message: '', action: null });
       }
-    }
+    });
   };
 
   const formatDate = (dateString) => {
@@ -267,6 +274,18 @@ const EventDetails = () => {
 
         </div>
       </div>
+      {confirmModal.show && (
+        <CustomizedModal 
+          onClose={() => setConfirmModal({ show: false, message: '', action: null })}
+          onConfirm={confirmModal.action}
+          confirmMessage={confirmModal.message}
+          confirmButtonText="Delete"
+          cancelButtonText="Cancel"
+          type="confirm"
+          allowCancel={true}
+          showCancel={true}
+        />
+      )}
     </div>
   );
 };

@@ -3,6 +3,7 @@ import { Link, useNavigate } from 'react-router-dom';
 import { useDispatch, useSelector } from 'react-redux';
 import { fetchEvents, deleteEvent } from '../store/eventSlice';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CustomizedModal from '../components/CustomizedModal';
 
 const Dashboard = () => {
   const dispatch = useDispatch();
@@ -10,6 +11,8 @@ const Dashboard = () => {
   const { events, isLoading, error } = useSelector((state) => state.events);
   const { user } = useSelector((state) => state.auth);
   const [deletingEventId, setDeletingEventId] = React.useState(null);
+  const [errorModal, setErrorModal] = React.useState({ show: false, message: '' });
+  const [confirmModal, setConfirmModal] = React.useState({ show: false, message: '', action: null });
 
   useEffect(() => {
     dispatch(fetchEvents());
@@ -19,34 +22,43 @@ const Dashboard = () => {
     // Debug: Log the event ID to understand what we're working with
     console.log('Attempting to delete event with ID:', eventId, 'Type:', typeof eventId);
     
-    if (window.confirm('Are you sure you want to delete this event?')) {
-      try {
-        setDeletingEventId(eventId);
-        await dispatch(deleteEvent(eventId)).unwrap();
-      } catch (error) {
-        console.error('Failed to delete event:', error);
-        
-        // Provide more detailed error information for debugging
-        let errorMessage = 'Failed to delete event';
-        
-        if (typeof error === 'string') {
-          errorMessage = error;
-        } else if (error?.message) {
-          errorMessage = error.message;
-        } else if (error?.response?.data?.detail) {
-          errorMessage = error.response.data.detail;
-        } else if (error?.response?.status) {
-          errorMessage = `Server error (${error.response.status}): ${error.response.statusText || 'Unknown error'}`;
-        } else if (!navigator.onLine) {
-          errorMessage = 'No internet connection. Please check your network.';
-        } else {
-          errorMessage = 'Network error. Please check your connection and try again.';
-        }
-        
-        alert(errorMessage);
-      } finally {
-        setDeletingEventId(null);
+    setConfirmModal({
+      show: true,
+      message: 'Are you sure you want to delete this event?',
+      action: () => {
+        setConfirmModal({ show: false, message: '', action: null });
+        performDeleteEvent(eventId);
       }
+    });
+  };
+
+  const performDeleteEvent = async (eventId) => {
+    try {
+      setDeletingEventId(eventId);
+      await dispatch(deleteEvent(eventId)).unwrap();
+    } catch (error) {
+      console.error('Failed to delete event:', error);
+        
+      // Provide more detailed error information for debugging
+      let errorMessage = 'Failed to delete event';
+      
+      if (typeof error === 'string') {
+        errorMessage = error;
+      } else if (error?.message) {
+        errorMessage = error.message;
+      } else if (error?.response?.data?.detail) {
+        errorMessage = error.response.data.detail;
+      } else if (error?.response?.status) {
+        errorMessage = `Server error (${error.response.status}): ${error.response.statusText || 'Unknown error'}`;
+      } else if (!navigator.onLine) {
+        errorMessage = 'No internet connection. Please check your network.';
+      } else {
+        errorMessage = 'Network error. Please check your connection and try again.';
+      }
+      
+      setErrorModal({ show: true, message: errorMessage });
+    } finally {
+      setDeletingEventId(null);
     }
   };
 
@@ -204,6 +216,26 @@ const Dashboard = () => {
         </div>
 
       </div>
+      {errorModal.show && (
+        <CustomizedModal 
+          onClose={() => setErrorModal({ show: false, message: '' })}
+          confirmMessage={errorModal.message}
+          confirmButtonText="OK"
+          allowCancel={false}
+          type="alert"
+        />
+      )}
+      {confirmModal.show && (
+        <CustomizedModal 
+          onClose={() => setConfirmModal({ show: false, message: '', action: null })}
+          onConfirm={confirmModal.action}
+          confirmMessage={confirmModal.message}
+          confirmButtonText="Delete"
+          cancelButtonText="Cancel"
+          allowCancel={true}
+          type="confirm"
+        />
+      )}
     </div>
   );
 };
