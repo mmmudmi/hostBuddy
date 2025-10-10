@@ -288,17 +288,20 @@ const styles = {
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    // Scalloped pattern background
-    '--s': '16px',
-    '--c1': '#f6f6f6ff',
+    // Hexagonal pattern background
+    '--s': '82px',
+    '--c1': '#f9f9f9ff',
     '--c2': '#ffffff',
-    '--g': 'radial-gradient(30% 50% at 30% 100%, transparent 66%, var(--c1) 67% 98%, transparent)',
+    '--c3': '#f5f5f5ff',
+    '--_g': 'var(--c3) 0 120deg, transparent 0',
     background: `
-      var(--g),
-      var(--g) calc(5*var(--s)) calc(3*var(--s)),
-      repeating-linear-gradient(90deg, var(--c1) 0 10%, var(--c2) 0 50%)
+      conic-gradient(from -60deg at 50% calc(100%/3), var(--_g)),
+      conic-gradient(from 120deg at 50% calc(200%/3), var(--_g)),
+      conic-gradient(from 60deg at calc(200%/3), var(--c3) 60deg, var(--c2) 0 120deg, transparent 0),
+      conic-gradient(from 180deg at calc(100%/3), var(--c1) 60deg, var(--_g)),
+      linear-gradient(90deg, var(--c1) calc(100%/6), var(--c2) 0 50%, var(--c1) 0 calc(500%/6), var(--c2) 0)
     `,
-    backgroundSize: 'calc(10*var(--s)) calc(6*var(--s))',
+    backgroundSize: 'calc(1.732 * var(--s)) var(--s)',
     borderTopLeftRadius: '12px',
     borderTopRightRadius: '12px',
     overflow: 'hidden',
