@@ -7,6 +7,7 @@ import layoutAPI from '../utils/api/layoutAPI';
 import userElementsAPI from '../utils/api/userElementsAPI';
 import jsPDF from 'jspdf';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CustomizedModal from '../components/CustomizedModal';
 import Icon from '@mdi/react';
 import { 
   mdiArrangeBringToFront, 
@@ -221,6 +222,10 @@ const LayoutDesigner = () => {
   const [showLayerDropdown, setShowLayerDropdown] = useState(false);
   const [showInfoHover, setShowInfoHover] = useState(false);
   
+  // Modal state for replacing alerts
+  const [alertModal, setAlertModal] = useState({ show: false, message: '', type: 'info' });
+  const [confirmModal, setConfirmModal] = useState({ show: false, message: '', action: null });
+  
   // Interactive states for border controls
   const [hoveredBorderWidth, setHoveredBorderWidth] = useState(null);
   const [hoveredBorderColor, setHoveredBorderColor] = useState(null);
@@ -293,24 +298,26 @@ const LayoutDesigner = () => {
   const CANVAS_SCALE = Math.min(800 / pageSize.width, 1);
 
   const colorOptions = [
+    '#ec4899', // Pink
+    '#f43f5e', // Rose
     '#ef4444', // Red
     '#f97316', // Orange
     '#f59e0b', // Amber
     '#84cc16', // Lime
     '#10b981', // Green
+    '#14b8a6', // Teal
     '#06b6d4', // Cyan
     '#3b82f6', // Blue
     '#6366f1', // Indigo
     '#8b5cf6', // Violet
-    '#ec4899', // Pink
-    '#f43f5e', // Rose
-    '#14b8a6', // Teal
-    '#fde68a', // Light amber
-    '#a7f3d0', // Light green
-    '#bfdbfe', // Light blue
+
     '#ddd6fe', // Light violet
-    '#fbcfe8', // Light pink
+    '#bfdbfe', // Light blue
+    '#a7f3d0', // Light green
+    '#fde68a', // Light amber
     '#fef3c7', // Cream
+    '#fbcfe8', // Light pink
+    
     '#000000', // Black
     '#374151', // Dark gray
     '#6b7280', // Medium gray
@@ -321,17 +328,18 @@ const LayoutDesigner = () => {
   ];
 
   const borderColorOptions = [
+    '#ec4899', // Pink
+    '#f43f5e', // Rose
     '#ef4444', // Red
     '#f97316', // Orange
     '#f59e0b', // Amber
     '#84cc16', // Lime
     '#10b981', // Green
+    '#14b8a6', // Teal
     '#06b6d4', // Cyan
     '#3b82f6', // Blue
     '#6366f1', // Indigo
     '#8b5cf6', // Violet
-    '#ec4899', // Pink
-    '#f43f5e', // Rose
     '#000000', // Black
     '#374151', // Dark gray
     '#6b7280', // Medium gray
@@ -1337,7 +1345,7 @@ const LayoutDesigner = () => {
 
     // Validate file type
     if (!file.type.startsWith('image/')) {
-      alert('Please select a valid image file.');
+      setAlertModal({ show: true, message: 'Please select a valid image file.', type: 'error' });
       return;
     }
 
@@ -1397,7 +1405,7 @@ const LayoutDesigner = () => {
       
       img.onerror = () => {
         console.error('Failed to load uploaded image');
-        alert('Failed to load the uploaded image.');
+        setAlertModal({ show: true, message: 'Failed to load the uploaded image.', type: 'error' });
       };
       
       img.src = e.target.result;
@@ -2209,7 +2217,7 @@ const LayoutDesigner = () => {
       ...prev.filter(element => !selectedIds.includes(element.id)),
       groupElement
     ]);
-    
+  
     // Select the new group
     setSelectedId(groupId);
     setSelectedIds([]);
@@ -2454,7 +2462,7 @@ const LayoutDesigner = () => {
 
     if (!hasSelection) {
       console.log('❌ No elements selected - showing alert');
-      alert('Please select an element to duplicate. Click on an element first, then click Duplicate.');
+      setAlertModal({ show: true, message: 'Please select an element to duplicate. Click on an element first, then click Duplicate.', type: 'info' });
       return;
     }
 
@@ -2845,7 +2853,7 @@ const LayoutDesigner = () => {
 
   const saveLayout = async () => {
     if (!layoutTitle.trim()) {
-      alert('Please enter a layout title');
+      setAlertModal({ show: true, message: 'Please enter a layout title', type: 'warning' });
       return;
     }
 
@@ -2867,11 +2875,11 @@ const LayoutDesigner = () => {
         if (existingLayout) {
           // Update existing layout
           await layoutAPI.updateLayout(existingLayout.id, layoutData);
-          alert('Layout updated successfully!');
+          setAlertModal({ show: true, message: 'Layout updated successfully!', type: 'success' });
         } else {
           // Create new layout
           await layoutAPI.createLayout(layoutData);
-          alert('Layout saved successfully!');
+          setAlertModal({ show: true, message: 'Layout saved successfully!', type: 'success' });
         }
       } catch (apiError) {
         console.warn('Backend unavailable, saving to localStorage:', apiError);
@@ -2886,7 +2894,7 @@ const LayoutDesigner = () => {
               : layout
           );
           localStorage.setItem('layouts', JSON.stringify(updatedLayouts));
-          alert('Layout updated locally (backend unavailable)');
+          setAlertModal({ show: true, message: 'Layout updated locally (backend unavailable)', type: 'warning' });
         } else {
           // Create new layout in localStorage
           const newLayout = {
@@ -2897,7 +2905,7 @@ const LayoutDesigner = () => {
           };
           savedLayouts.push(newLayout);
           localStorage.setItem('layouts', JSON.stringify(savedLayouts));
-          alert('Layout saved locally (backend unavailable)');
+          setAlertModal({ show: true, message: 'Layout saved locally (backend unavailable)', type: 'warning' });
         }
       }
       
@@ -2907,7 +2915,7 @@ const LayoutDesigner = () => {
     } catch (error) {
       console.error('Error saving layout:', error);
       const errorMessage = error.response?.data?.detail || error.message || 'Unknown error occurred';
-      alert(`Failed to save layout: ${errorMessage}. Please check if the backend server is running.`);
+      setAlertModal({ show: true, message: `Failed to save layout: ${errorMessage}. Please check if the backend server is running.`, type: 'error' });
     } finally {
       setIsSaving(false);
     }
@@ -2916,14 +2924,21 @@ const LayoutDesigner = () => {
   const loadLayout = async (layoutId) => {
     // Check for unsaved changes before switching layouts
     if (hasUnsavedChanges) {
-      const confirmSwitch = window.confirm(
-        'You have unsaved changes that will be lost. Are you sure you want to switch to another layout?'
-      );
-      if (!confirmSwitch) {
-        return;
-      }
+      setConfirmModal({
+        show: true,
+        message: 'You have unsaved changes that will be lost. Are you sure you want to switch to another layout?',
+        action: async () => {
+          setConfirmModal({ show: false, message: '', action: null });
+          await performLoadLayout(layoutId);
+        }
+      });
+      return;
     }
 
+    await performLoadLayout(layoutId);
+  };
+
+  const performLoadLayout = async (layoutId) => {
     try {
       // Try to load from backend first
       const layout = await layoutAPI.getLayoutById(layoutId);
@@ -2950,16 +2965,23 @@ const LayoutDesigner = () => {
         setClipboardOperation(null);
         setHasUnsavedChanges(false);
       } else {
-        alert('Failed to load layout');
+        setAlertModal({ show: true, message: 'Failed to load layout', type: 'error' });
       }
     }
   };
 
   const deleteLayout = async (layoutId, layoutTitle) => {
-    if (!window.confirm(`Are you sure you want to delete the layout "${layoutTitle}"?`)) {
-      return;
-    }
+    setConfirmModal({
+      show: true,
+      message: `Are you sure you want to delete the layout "${layoutTitle}"?`,
+      action: async () => {
+        setConfirmModal({ show: false, message: '', action: null });
+        await performDeleteLayout(layoutId);
+      }
+    });
+  };
 
+  const performDeleteLayout = async (layoutId) => {
     try {
       // Try to delete from backend first
       await layoutAPI.deleteLayout(layoutId);
@@ -2969,7 +2991,7 @@ const LayoutDesigner = () => {
       const savedLayouts = JSON.parse(localStorage.getItem('layouts') || '[]');
       const updatedLayouts = savedLayouts.filter(l => l.id !== layoutId);
       localStorage.setItem('layouts', JSON.stringify(updatedLayouts));
-      alert('Layout deleted locally (backend unavailable)');
+      setAlertModal({ show: true, message: 'Layout deleted locally (backend unavailable)', type: 'warning' });
     } finally {
       // Reload the layouts list
       loadLayouts();
@@ -2978,11 +3000,21 @@ const LayoutDesigner = () => {
 
   const newLayout = () => {
     if (layoutElements.length > 0 || layoutTitle.trim() || hasUnsavedChanges) {
-      if (!window.confirm('Are you sure you want to start a new layout? Any unsaved changes will be lost.')) {
-        return;
-      }
+      setConfirmModal({
+        show: true,
+        message: 'Are you sure you want to start a new layout? Any unsaved changes will be lost.',
+        action: () => {
+          setConfirmModal({ show: false, message: '', action: null });
+          performNewLayout();
+        }
+      });
+      return;
     }
     
+    performNewLayout();
+  };
+
+  const performNewLayout = () => {
     // Clear everything for a fresh start
     setLayoutElements([]);
     setLayoutTitle('');
@@ -3036,7 +3068,7 @@ const LayoutDesigner = () => {
       
       // Calculate bounding box of all layout elements
       if (layoutElements.length === 0) {
-        alert('No elements to export');
+        setAlertModal({ show: true, message: 'No elements to export', type: 'warning' });
         // Remove background rectangle and restore everything
         backgroundRect.destroy();
         gridElements.forEach(element => element.visible(true));
@@ -3129,16 +3161,22 @@ const LayoutDesigner = () => {
       
       // Check if there are any elements (optional warning)
       if (layoutElements.length === 0) {
-        const proceed = window.confirm('No elements found. Export empty canvas?');
-        if (!proceed) {
-          // Remove background rectangle and restore everything
-          backgroundRect.destroy();
-          gridElements.forEach(element => element.visible(true));
-          layer.batchDraw();
-          return;
-        }
+        setConfirmModal({
+          show: true,
+          message: 'No elements found. Export empty canvas?',
+          action: () => {
+            setConfirmModal({ show: false, message: '', action: null });
+            // Continue with export
+            performExport(backgroundRect, gridElements, layer);
+          }
+        });
+        return;
       }
       
+      performExport(backgroundRect, gridElements, layer);
+    };
+
+    const performExport = (backgroundRect, gridElements, layer) => {
       // Export full canvas (800x600) with white background
       const dataURL = stageRef.current.toDataURL({ 
         pixelRatio: 2
@@ -3177,16 +3215,25 @@ const LayoutDesigner = () => {
   };
 
   const clearLayout = () => {
-    if (window.confirm('Are you sure you want to clear the entire layout?')) {
-      setLayoutElements([]);
-      setSelectedId(null);
-      setSelectedIds([]);
-      setIsMultiSelect(false);
-      setTempGroupBounds(null);
-      setClipboard([]);
-      setClipboardOperation(null);
-      setHasUnsavedChanges(false);
-    }
+    setConfirmModal({
+      show: true,
+      message: 'Are you sure you want to clear the entire layout?',
+      action: () => {
+        setConfirmModal({ show: false, message: '', action: null });
+        performClearLayout();
+      }
+    });
+  };
+
+  const performClearLayout = () => {
+    setLayoutElements([]);
+    setSelectedId(null);
+    setSelectedIds([]);
+    setIsMultiSelect(false);
+    setTempGroupBounds(null);
+    setClipboard([]);
+    setClipboardOperation(null);
+    setHasUnsavedChanges(false);
   };
 
   // Render shape based on type
@@ -4213,12 +4260,14 @@ const LayoutDesigner = () => {
           <button
             onClick={() => {
               if (hasUnsavedChanges) {
-                const confirmLeave = window.confirm(
-                  'You have unsaved changes that will be lost. Are you sure you want to go back to the event page?'
-                );
-                if (confirmLeave) {
-                  navigate(`/events/${id}`);
-                }
+                setConfirmModal({
+                  show: true,
+                  message: 'You have unsaved changes that will be lost. Are you sure you want to go back?',
+                  action: () => {
+                    navigate(`/events/${id}`);
+                    setConfirmModal({ show: false, message: '', action: null });
+                  }
+                });
               } else {
                 navigate(`/events/${id}`);
               }
@@ -6272,6 +6321,30 @@ const LayoutDesigner = () => {
             </div>
           </div>
         </div>
+      )}
+      
+      {/* Alert Modal */}
+      {alertModal.show && (
+        <CustomizedModal 
+          onClose={() => setAlertModal({ show: false, message: '', type: 'info' })}
+          confirmMessage={alertModal.message}
+          confirmButtonText="OK"
+          allowCancel={false}
+          type="alert"
+        />
+      )}
+      
+      {/* Confirm Modal */}
+      {confirmModal.show && (
+        <CustomizedModal 
+          onClose={() => setConfirmModal({ show: false, message: '', action: null })}
+          onConfirm={confirmModal.action}
+          confirmMessage={confirmModal.message}
+          confirmButtonText="Yes, Leave"
+          cancelButtonText="Cancel"
+          type="confirm"
+          showCancel={true}
+        />
       )}
       </div>
     </div>
