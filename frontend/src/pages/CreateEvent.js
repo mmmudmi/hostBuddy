@@ -353,7 +353,7 @@ const CreateEvent = () => {
                           style={styles.clearTimeBtn}
                           title="Clear start time"
                         >
-                          ×
+                          <i class="fa-solid fa-circle-xmark"></i>
                         </button>
                       )}
                     </div>
@@ -383,7 +383,7 @@ const CreateEvent = () => {
                           style={styles.clearTimeBtn}
                           title="Clear end time"
                         >
-                          ×
+                          <i class="fa-solid fa-circle-xmark"></i>
                         </button>
                       )}
                     </div>
@@ -444,7 +444,7 @@ const CreateEvent = () => {
                           style={styles.removeImageBtn}
                           title="Remove image"
                         >
-                          ×
+                          <i class="fa-solid fa-circle-xmark"></i>
                         </button>
                       </div>
                     </div>
@@ -555,21 +555,21 @@ const styles = {
   },
   removeImageBtn: {
     position: 'absolute',
-    top: '8px',
-    right: '8px',
-    backgroundColor: 'rgba(220, 38, 38, 0.9)',
-    color: 'white',
+    top: '7px',
+    right: '7px',
+    // backgroundColor: 'rgba(220, 38, 38, 0.9)',
+    color: '#b9b9b9ff',
     border: 'none',
-    borderRadius: '50%',
-    width: '25px',
-    height: '25px',
-    fontSize: '16px',
-    fontWeight: 'bold',
+    // borderRadius: '50%',
+    // width: '25px',
+    // height: '25px',
+    fontSize: '20px',
+    // fontWeight: 'bold',
+    backgroundColor: 'transparent',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',
     justifyContent: 'center',
-    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.2)',
     transition: 'all 0.2s ease',
     margin: '-1rem -1.5rem 0 0',
   },
@@ -590,14 +590,12 @@ const styles = {
   clearTimeBtn: {
     position: 'absolute',
     right: '8px',
-    backgroundColor: 'rgba(107, 114, 128, 0.7)',
-    color: 'white',
+    top: '50%',
+    transform: 'translateY(-50%)',
+    backgroundColor: 'transparent',
+    color: '#b9b9b9ff',
     border: 'none',
-    borderRadius: '50%',
-    width: '20px',
-    height: '20px',
-    fontSize: '14px',
-    fontWeight: 'bold',
+    fontSize: '20px',
     cursor: 'pointer',
     display: 'flex',
     alignItems: 'center',

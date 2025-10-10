@@ -70,7 +70,6 @@ const Dashboard = () => {
   };
 
   const formatEventDates = (event) => {
-    console.log('Formatting dates for event:', event);
     if (!event.start_date) return 'No date set';
     
     const startDate = new Date(event.start_date);
@@ -144,7 +143,7 @@ const Dashboard = () => {
           <div style={styles.eventsHeader}>
             <h3 style={{marginBottom: '1rem'}}>Your Events</h3>
             <Link to="/create-event" className="btn" style={styles.circleBtn}>
-              +
+              <i class="fa-solid fa-plus"></i>
             </Link>
           </div>
           {events.length === 0 ? (
@@ -169,12 +168,18 @@ const Dashboard = () => {
                   onClick={() => navigate(`/events/${event.event_id}`)}
                   style={{ cursor: 'pointer' }}
                 >
-                  {event.images && event.images.length > 0 && (
+                  {event.images && event.images.length > 0 ? (
                     <img 
                       src={event.images[0]} 
                       alt={event.title}
                       className="event-image"
                     />
+                  ) : (
+                    <div 
+                      className="event-image-placeholder"
+                      style={styles.imagePlaceholder}
+                    >
+                    </div>
                   )}
                   
                   <div className="event-content">
@@ -275,6 +280,28 @@ const styles = {
     fontSize: '0.875rem',
     color: '#6b7280',
     marginTop: '0.25rem',
+  },
+  imagePlaceholder: {
+    width: '100%',
+    height: '200px',
+    position: 'relative',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    // Scalloped pattern background
+    '--s': '16px',
+    '--c1': '#f6f6f6ff',
+    '--c2': '#ffffff',
+    '--g': 'radial-gradient(30% 50% at 30% 100%, transparent 66%, var(--c1) 67% 98%, transparent)',
+    background: `
+      var(--g),
+      var(--g) calc(5*var(--s)) calc(3*var(--s)),
+      repeating-linear-gradient(90deg, var(--c1) 0 10%, var(--c2) 0 50%)
+    `,
+    backgroundSize: 'calc(10*var(--s)) calc(6*var(--s))',
+    borderTopLeftRadius: '12px',
+    borderTopRightRadius: '12px',
+    overflow: 'hidden',
   },
 };
 

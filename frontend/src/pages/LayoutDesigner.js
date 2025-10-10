@@ -5500,7 +5500,8 @@ const LayoutDesigner = () => {
                           }}
                           title="Delete custom element"
                         >
-                          ×
+                          <i class="fa-solid fa-circle-xmark"></i>
+                          {/* × */}
                         </button>
                       </div>
                     );
@@ -5524,7 +5525,7 @@ const LayoutDesigner = () => {
                 style={styles.newLayoutButton}
                 title="Create new layout"
               >
-                +
+                <i class="fa-solid fa-plus"></i>
               </button>
             </div>
             
@@ -5552,7 +5553,8 @@ const LayoutDesigner = () => {
                       }}
                       title="Delete layout"
                     >
-                      ×
+                      <i class="fa-solid fa-circle-xmark"></i>
+                      {/* × */}
                     </button>
                   </div>
                 ))}
@@ -6337,7 +6339,7 @@ const styles = {
     border: 'none',
     padding: '0.5rem',
     borderRadius: '6px',
-    fontSize: '1.3rem',
+    fontSize: '1rem',
     cursor: 'pointer',
     fontWeight: '500',
     transition: 'background-color 0.2s',
@@ -6885,11 +6887,12 @@ const styles = {
     position: 'absolute',
     top: '4px',
     right: '4px',
-    color: '#6b7280',
+    color: '#cbcbcbff',
     border: 'none',
-    borderRadius: '50%',
-    width: '16px',
-    height: '16px',
+    // borderRadius: '50%',
+    // width: '16px',
+    // height: '16px',
+    backgroundColor: 'transparent',
     fontSize: '13px',
     cursor: 'pointer',
     display: 'flex',
