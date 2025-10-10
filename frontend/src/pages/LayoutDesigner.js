@@ -262,6 +262,10 @@ const LayoutDesigner = () => {
   const [pageSize, setPageSize] = useState({ width: 800, height: 600 });
   const [pageSizePreset, setPageSizePreset] = useState('custom');
   const [showPageSizeControls, setShowPageSizeControls] = useState(false);
+  // Temporary state for custom page size inputs (actual page dimensions, not canvas dimensions)
+  const [tempCustomPageSize, setTempCustomPageSize] = useState({ width: 800, height: 600 });
+  // Temporary state for the selected preset (before applying)
+  const [tempPageSizePreset, setTempPageSizePreset] = useState('custom');
   
   // Image handling state
   const [showImageUpload, setShowImageUpload] = useState(false);
@@ -276,15 +280,17 @@ const LayoutDesigner = () => {
     'letter-portrait': { width: 612, height: 792, canvasWidth: 800, canvasHeight: 1035, label: 'Letter Portrait' },
     'letter-landscape': { width: 792, height: 612, canvasWidth: 800, canvasHeight: 618, label: 'Letter Landscape' },
     'square': { width: 1000, height: 1000, canvasWidth: 800, canvasHeight: 800, label: 'Square' },
+    '800x600': { width: 800, height: 600, canvasWidth: 800, canvasHeight: 600, label: '800x600' },
+    '600x800': { width: 600, height: 800, canvasWidth: 600, canvasHeight: 800, label: '600x800' },
   };
   
-  // Use canvas dimensions from page size presets
+  // Use canvas dimensions from page size state (which is updated when custom size changes)
   const currentPreset = pageSizePresets[pageSizePreset] || pageSizePresets.custom;
-  const STAGE_WIDTH = currentPreset.canvasWidth;
-  const STAGE_HEIGHT = currentPreset.canvasHeight;
+  const STAGE_WIDTH = pageSize.width;
+  const STAGE_HEIGHT = pageSize.height;
   
   // Calculate scale factor to fit stage within 800px width while maintaining aspect ratio
-  const CANVAS_SCALE = Math.min(800 / currentPreset.canvasWidth, 1);
+  const CANVAS_SCALE = Math.min(800 / pageSize.width, 1);
 
   const colorOptions = [
     '#ef4444', // Red
@@ -1181,6 +1187,19 @@ const LayoutDesigner = () => {
       setCustomElements(filtered);
     }
   }, [loadCustomElements]);
+
+  // Initialize tempCustomPageSize with the current custom preset values
+  useEffect(() => {
+    // Always initialize temp values with current custom preset values
+    // This ensures users can see and modify the current page size
+    const currentCustomPreset = pageSizePresets.custom;
+    setTempCustomPageSize({ 
+      width: currentCustomPreset.width, 
+      height: currentCustomPreset.height 
+    });
+    // Also initialize the temporary preset state
+    setTempPageSizePreset(pageSizePreset);
+  }, []); // Only run once on mount
 
   // Add CSS animations to document head
   useEffect(() => {
@@ -2583,11 +2602,22 @@ const LayoutDesigner = () => {
   const handlePageSizeChange = useCallback((preset) => {
     const newSize = pageSizePresets[preset];
     if (newSize) {
-      setPageSize({ width: newSize.canvasWidth, height: newSize.canvasHeight });
-      setPageSizePreset(preset);
-      setHasUnsavedChanges(true);
+      // Only update temporary preset, don't apply immediately
+      setTempPageSizePreset(preset);
+      // Only update temp custom page size when switching to a NON-custom preset
+      // This preserves user-typed values when switching to custom
+      if (preset !== 'custom') {
+        setTempCustomPageSize({ width: newSize.width, height: newSize.height });
+      } else {
+        // When switching back to custom, restore the current actual custom page size
+        // instead of keeping temporary values from other presets
+        setTempCustomPageSize({ 
+          width: pageSizePresets.custom.width, 
+          height: pageSizePresets.custom.height 
+        });
+      }
     }
-  }, [setHasUnsavedChanges]);
+  }, []);
 
   const handleCustomPageSize = useCallback((width, height) => {
     const newWidth = Math.max(200, Math.min(3000, parseInt(width) || 800));
@@ -2608,8 +2638,41 @@ const LayoutDesigner = () => {
     
     setPageSize({ width: canvasWidth, height: canvasHeight });
     setPageSizePreset('custom');
+    // Don't update tempCustomPageSize here to avoid overriding user input
     setHasUnsavedChanges(true);
   }, [setHasUnsavedChanges]);
+
+  // Handle temporary custom page size input changes (doesn't apply immediately)
+  const handleTempCustomPageSizeChange = useCallback((width, height) => {
+    // Allow string values during typing, don't immediately parse/constrain
+    setTempCustomPageSize({ width, height });
+  }, []);
+
+  // Apply custom page size from temporary state
+  const applyCustomPageSize = useCallback(() => {
+    handleCustomPageSize(tempCustomPageSize.width, tempCustomPageSize.height);
+  }, [tempCustomPageSize.width, tempCustomPageSize.height, handleCustomPageSize]);
+
+  // Apply page size changes (for both presets and custom)
+  const applyPageSizeChanges = useCallback(() => {
+    if (tempPageSizePreset === 'custom') {
+      // Apply custom page size - validate values when applying
+      const validWidth = Math.max(200, Math.min(3000, parseInt(tempCustomPageSize.width) || 800));
+      const validHeight = Math.max(200, Math.min(3000, parseInt(tempCustomPageSize.height) || 600));
+      handleCustomPageSize(validWidth, validHeight);
+      // Update temp preset to keep UI in sync
+      setTempPageSizePreset('custom');
+    } else {
+      // Apply preset page size
+      const newSize = pageSizePresets[tempPageSizePreset];
+      if (newSize) {
+        setPageSize({ width: newSize.canvasWidth, height: newSize.canvasHeight });
+        setPageSizePreset(tempPageSizePreset);
+        setTempCustomPageSize({ width: newSize.width, height: newSize.height });
+        setHasUnsavedChanges(true);
+      }
+    }
+  }, [tempPageSizePreset, tempCustomPageSize.width, tempCustomPageSize.height, handleCustomPageSize, setHasUnsavedChanges]);
 
   // Keyboard shortcuts handler
   const handleKeyDown = useCallback((event) => {
@@ -4160,16 +4223,7 @@ const LayoutDesigner = () => {
                 navigate(`/events/${id}`);
               }
             }}
-            className="backLink"
-            style={{
-              background: 'none',
-              border: 'none',
-              cursor: 'pointer',
-              padding: 0,
-              font: 'inherit',
-              fontSize: '14px',
-            }}
-          >
+            className="backLink">
             ← Back to Event
           </button>
         </div>
@@ -4215,8 +4269,8 @@ const LayoutDesigner = () => {
                 className="btn btn-info btn-small"
                 title={snapToGrid ? "Turn off grid snapping" : "Turn on grid snapping"}
                 style={{
-                  backgroundColor: snapToGrid ? '#10b981' : '#f3f4f6',
-                  color: snapToGrid ? 'white' : '#374151',
+                  backgroundColor: snapToGrid ? '#0fc29eff' : '#e2e2e2',
+                  color: snapToGrid ? 'white' : '#000000ff',
                   display: 'flex',
                   alignItems: 'center',
                   gap: '4px',
@@ -4275,7 +4329,7 @@ const LayoutDesigner = () => {
                     {/* Preset Selection */}
                     <div style={{ marginBottom: '12px' }}>
                       <select
-                        value={pageSizePreset}
+                        value={tempPageSizePreset}
                         onChange={(e) => handlePageSizeChange(e.target.value)}
                         style={{
                           width: '100%',
@@ -4298,49 +4352,72 @@ const LayoutDesigner = () => {
                     </div>
 
                     {/* Custom Dimensions */}
-                    {pageSizePreset === 'custom' && (
-                      <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
-                            Width
-                          </label>
-                          <input
-                            type="number"
-                            min="200"
-                            max="3000"
-                            value={pageSize.width}
-                            onChange={(e) => handleCustomPageSize(e.target.value, pageSize.height)}
-                            style={{
-                              width: '100%',
-                              padding: '4px 6px',
-                              borderRadius: '4px',
-                              border: '1px solid #d1d5db',
-                              fontSize: '12px'
-                            }}
-                          />
-                        </div>
-                        <div style={{ padding: '0 4px', color: '#6b7280', fontSize: '12px' }}>×</div>
-                        <div style={{ flex: 1 }}>
-                          <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
-                            Height
-                          </label>
-                          <input
-                            type="number"
-                            min="200"
-                            max="3000"
-                            value={pageSize.height}
-                            onChange={(e) => handleCustomPageSize(pageSize.width, e.target.value)}
-                            style={{
-                              width: '100%',
-                              padding: '4px 6px',
-                              borderRadius: '4px',
-                              border: '1px solid #d1d5db',
-                              fontSize: '12px'
-                            }}
-                          />
+                    {tempPageSizePreset === 'custom' && (
+                      <div style={{ marginBottom: '8px' }}>
+                        <div style={{ display: 'flex', gap: '8px', alignItems: 'center', marginBottom: '8px' }}>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                              Width
+                            </label>
+                            <input
+                              type="number"
+                              min="200"
+                              max="3000"
+                              value={tempCustomPageSize.width}
+                              onChange={(e) => handleTempCustomPageSizeChange(e.target.value, tempCustomPageSize.height)}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #d1d5db',
+                                fontSize: '12px'
+                              }}
+                            />
+                          </div>
+                          <div style={{ padding: '0 4px', color: '#6b7280', fontSize: '12px' }}>×</div>
+                          <div style={{ flex: 1 }}>
+                            <label style={{ display: 'block', fontSize: '11px', color: '#6b7280', marginBottom: '2px' }}>
+                              Height
+                            </label>
+                            <input
+                              type="number"
+                              min="200"
+                              max="3000"
+                              value={tempCustomPageSize.height}
+                              onChange={(e) => handleTempCustomPageSizeChange(tempCustomPageSize.width, e.target.value)}
+                              style={{
+                                width: '100%',
+                                padding: '4px 6px',
+                                borderRadius: '4px',
+                                border: '1px solid #d1d5db',
+                                fontSize: '12px'
+                              }}
+                            />
+                          </div>
                         </div>
                       </div>
                     )}
+                    
+                    {/* Apply Button - Show for all options */}
+                    <button
+                      onClick={applyPageSizeChanges}
+                      style={{
+                        width: '100%',
+                        padding: '6px 12px',
+                        backgroundColor: '#10b981',
+                        color: 'white',
+                        border: 'none',
+                        borderRadius: '4px',
+                        fontSize: '12px',
+                        fontWeight: '500',
+                        cursor: 'pointer',
+                        transition: 'background-color 0.2s ease'
+                      }}
+                      onMouseEnter={(e) => e.target.style.backgroundColor = '#059669'}
+                      onMouseLeave={(e) => e.target.style.backgroundColor = '#10b981'}
+                    >
+                      Apply {pageSizePresets[tempPageSizePreset]?.label || 'Custom Size'}
+                    </button>
                   </div>
                 )}
               </div>
@@ -4351,8 +4428,8 @@ const LayoutDesigner = () => {
                   onClick={() => setShowExportDropdown(!showExportDropdown)}
                   className="btn btn-info btn-small"
                   style={{
-                    backgroundColor: showPageSizeControls ? '#9a9a9aff' : '#e2e2e2',
-                    color: showPageSizeControls ? 'white' : '#000000ff',
+                    backgroundColor: showExportDropdown ? '#9a9a9aff' : '#e2e2e2',
+                    color: showExportDropdown ? 'white' : '#000000ff',
                     display: 'flex',
                     alignItems: 'center',
                     gap: '4px',
@@ -4430,10 +4507,11 @@ const LayoutDesigner = () => {
               {clipboard.length > 0 && (
                 <button 
                   onClick={pasteElements}
-                  className="btn btn-info btn-small"
+                  className="btn btn-secondary btn-small"
                   title="Paste elements (Ctrl+V)"
                 >
-                  Paste
+                  <i class="fa-solid fa-paste"></i> 
+                  {/* Paste */}
                 </button>
               )}
               
@@ -4844,22 +4922,25 @@ const LayoutDesigner = () => {
                 className="btn btn-secondary btn-small"
                 title="Cut selected elements (Ctrl+X)"
               >
-                Cut
+                {/* Cut */}
+                <i class="fas fa-cut"></i>
               </button>
               <button 
                 onClick={copyElements}
                 className="btn btn-secondary btn-small"
                 title="Copy selected elements (Ctrl+C)"
               >
-                Copy
+                {/* Copy */}
+                <i class="fa-solid fa-copy"></i>
               </button>
               {clipboard.length > 0 && (
                 <button 
                   onClick={pasteElements}
-                  className="btn btn-info btn-small"
+                  className="btn btn-secondary btn-small"
                   title="Paste elements (Ctrl+V)"
                 >
-                  Paste
+                  {/* Paste */}
+                  <i class="fa-solid fa-paste"></i>
                 </button>
               )}
               <button 
@@ -4980,10 +5061,18 @@ const LayoutDesigner = () => {
               {elementTypes.map((elementType, index) => (
                 <div
                   key={index}
-                  style={{...styles.elementItem, backgroundColor: elementType.color}}
+                  style={{...styles.elementItem}}
                   onClick={() => addElement(elementType)}
                 >
-                  <span style={styles.elementIcon}>{elementType.icon}</span>
+                  <span style={styles.elementIcon}>
+                    {elementType.label === 'Image' ? (
+                      <i class="fa-solid fa-image"></i>
+                    ) : elementType.label === "Text" ? (
+                      <i class="fa-solid fa-font"></i>
+                    ) : (
+                      elementType.icon
+                    )}
+                  </span>
                   <span style={styles.elementLabel}>{elementType.label}</span>
                 </div>
               ))}
@@ -6248,7 +6337,7 @@ const styles = {
     border: 'none',
     padding: '0.5rem',
     borderRadius: '6px',
-    fontSize: '0.8rem',
+    fontSize: '1.3rem',
     cursor: 'pointer',
     fontWeight: '500',
     transition: 'background-color 0.2s',
@@ -6271,16 +6360,20 @@ const styles = {
     borderRadius: '8px',
     cursor: 'pointer',
     textAlign: 'center',
-    color: 'white',
+    color: '#363636ff',
     fontWeight: 'bold',
     transition: 'opacity 0.2s, transform 0.1s',
     display: 'flex',
     flexDirection: 'column',
     alignItems: 'center',
+    backgroundColor: '#ffffffff',
     gap: '0.25rem',
     minHeight: '70px',
+    margin: '2px',
+    boxShadow: '0 2px 4px rgba(0, 0, 0, 0.1), 0 1px 2px rgba(0, 0, 0, 0.05)',
     ':hover': {
       transform: 'scale(1.05)',
+      boxShadow: '0 4px 8px rgba(0, 0, 0, 0.15), 0 2px 4px rgba(0, 0, 0, 0.1)',
     },
   },
   elementIcon: {
@@ -6715,7 +6808,7 @@ const styles = {
     marginBottom: '12px',
   },
   searchInput: {
-    padding: '6px 8px',
+    padding: '9px 8px',
     borderRadius: '7px',
     fontSize: '12px',
   },
@@ -6792,8 +6885,7 @@ const styles = {
     position: 'absolute',
     top: '4px',
     right: '4px',
-    backgroundColor: '#e3e3e3ff',
-    color: 'white',
+    color: '#6b7280',
     border: 'none',
     borderRadius: '50%',
     width: '16px',
