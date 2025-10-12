@@ -17,7 +17,7 @@ const Navbar = () => {
     <nav style={styles.navbar}>
       <div className="container" style={styles.navContainer}>
         <Link to="/">
-          <img src="images/logo.png" alt="Host Buddy Logo" style={{height: '40px', marginRight: '8px'}} />
+          <img src="svg/logo_black.svg" alt="Host Buddy Logo" style={{height: '40px', marginRight: '8px'}} />
         </Link>
         
         <div style={styles.navLinks}>

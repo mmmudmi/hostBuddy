@@ -501,7 +501,6 @@ const LayoutDesigner = () => {
     };
     
     const thumbnail = await generateThumbnail();
-    console.log('Generated thumbnail for custom element:', thumbnail ? 'Yes' : 'No (using live Konva preview)');
 
     const elementData = {
       name,
