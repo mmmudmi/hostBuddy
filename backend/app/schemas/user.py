@@ -44,3 +44,33 @@ class Token(BaseModel):
 
 class TokenData(BaseModel):
     email: Optional[str] = None
+
+
+# Settings Schemas
+class UserUpdateProfile(BaseModel):
+    name: Optional[str] = None
+    email: Optional[EmailStr] = None
+
+
+class UserUpdatePassword(BaseModel):
+    current_password: str
+    new_password: str
+    
+    @validator('new_password')
+    def validate_new_password(cls, v):
+        if len(v) < 6:
+            raise ValueError('Password must be at least 6 characters long')
+        if len(v.encode('utf-8')) > 72:
+            raise ValueError('Password cannot be longer than 72 bytes')
+        return v
+
+
+class UserDeleteConfirmation(BaseModel):
+    password: str
+    confirmation: str  # User must type "DELETE" to confirm
+    
+    @validator('confirmation')
+    def validate_confirmation(cls, v):
+        if v.upper() != "DELETE":
+            raise ValueError('You must type "DELETE" to confirm account deletion')
+        return v
