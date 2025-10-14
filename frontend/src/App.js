@@ -14,6 +14,7 @@ import Dashboard from './pages/Dashboard';
 import CreateEvent from './pages/CreateEvent';
 import EventDetails from './pages/EventDetails';
 import LayoutDesigner from './pages/LayoutDesigner';
+import Settings from './pages/Settings';
 
 // Components
 import Navbar from './components/Navbar';
@@ -111,6 +112,14 @@ function App() {
             element={
               <PrivateRoute>
                 <LayoutDesigner />
+              </PrivateRoute>
+            } 
+          />
+          <Route 
+            path="/settings" 
+            element={
+              <PrivateRoute>
+                <Settings />
               </PrivateRoute>
             } 
           />

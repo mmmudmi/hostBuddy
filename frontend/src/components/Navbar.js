@@ -29,6 +29,9 @@ const Navbar = () => {
               <span style={styles.userInfo}>
                 Welcome, {user?.name}
               </span>
+              <Link to="/settings" className="btn btn-transparent" style={{ marginRight: '8px' }}>
+                Settings
+              </Link>
               <button 
                 onClick={handleLogout}
                 className="btn btn-transparent"

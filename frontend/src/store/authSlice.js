@@ -103,6 +103,44 @@ export const getCurrentUser = createAsyncThunk(
   }
 );
 
+export const updateUserProfile = createAsyncThunk(
+  'auth/updateUserProfile',
+  async (profileData, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.updateProfile(profileData);
+      return response;
+    } catch (error) {
+      return rejectWithValue(parseErrorResponse(error));
+    }
+  }
+);
+
+export const updateUserPassword = createAsyncThunk(
+  'auth/updateUserPassword',
+  async (passwordData, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.updatePassword(passwordData);
+      return response;
+    } catch (error) {
+      return rejectWithValue(parseErrorResponse(error));
+    }
+  }
+);
+
+export const deleteUserAccount = createAsyncThunk(
+  'auth/deleteUserAccount',
+  async (deleteData, { rejectWithValue }) => {
+    try {
+      const response = await authAPI.deleteAccount(deleteData);
+      // After successful deletion, clear token
+      clearStoredToken();
+      return response;
+    } catch (error) {
+      return rejectWithValue(parseErrorResponse(error));
+    }
+  }
+);
+
 const authSlice = createSlice({
   name: 'auth',
   initialState: {
@@ -193,6 +231,50 @@ const authSlice = createSlice({
         state.token = null;
         state.tokenExpiresAt = null;
         state.user = null;
+      })
+      // Update user profile
+      .addCase(updateUserProfile.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateUserProfile.fulfilled, (state, action) => {
+        state.isLoading = false;
+        state.user = action.payload;
+        state.error = null;
+      })
+      .addCase(updateUserProfile.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      // Update user password
+      .addCase(updateUserPassword.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(updateUserPassword.fulfilled, (state) => {
+        state.isLoading = false;
+        state.error = null;
+      })
+      .addCase(updateUserPassword.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
+      })
+      // Delete user account
+      .addCase(deleteUserAccount.pending, (state) => {
+        state.isLoading = true;
+        state.error = null;
+      })
+      .addCase(deleteUserAccount.fulfilled, (state) => {
+        state.isLoading = false;
+        state.user = null;
+        state.token = null;
+        state.isAuthenticated = false;
+        state.tokenExpiresAt = null;
+        state.error = null;
+      })
+      .addCase(deleteUserAccount.rejected, (state, action) => {
+        state.isLoading = false;
+        state.error = action.payload;
       });
   },
 });
