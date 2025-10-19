@@ -1,8 +1,9 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useSelector, useDispatch } from 'react-redux';
 import { useNavigate } from 'react-router-dom';
 import { updateUserProfile, updateUserPassword, deleteUserAccount } from '../store/authSlice';
 import LoadingSpinner from '../components/LoadingSpinner';
+import CustomizedModal from '../components/CustomizedModal';
 
 const Settings = () => {
   const navigate = useNavigate();
@@ -14,6 +15,22 @@ const Settings = () => {
     name: user?.name || '',
     email: user?.email || ''
   });
+  
+  // Store original user values for comparison
+  const [originalUser, setOriginalUser] = useState({
+    name: user?.name || '',
+    email: user?.email || ''
+  });
+
+  // Only update original user on initial load
+  useEffect(() => {
+    if (user && !originalUser.name && !originalUser.email) {
+      setOriginalUser({
+        name: user.name || '',
+        email: user.email || ''
+      });
+    }
+  }, [user, originalUser]);
   
   const [passwordForm, setPasswordForm] = useState({
     currentPassword: '',
@@ -39,6 +56,23 @@ const Settings = () => {
   // Success messages
   const [profileSuccess, setProfileSuccess] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  
+  // Modal states
+  const [showSuccessModal, setShowSuccessModal] = useState(false);
+  const [modalMessage, setModalMessage] = useState('');
+
+  // Debug modal state changes
+  useEffect(() => {
+    console.log('showSuccessModal changed to:', showSuccessModal);
+  }, [showSuccessModal]);
+
+  useEffect(() => {
+    console.log('modalMessage changed to:', modalMessage);
+  }, [modalMessage]);
+
+  useEffect(() => {
+    console.log('profileError state changed to:', profileError);
+  }, [profileError]);
 
   const handleProfileSubmit = async (e) => {
     e.preventDefault();
@@ -48,24 +82,45 @@ const Settings = () => {
     
     try {
       // Only send fields that have changed
-      const updateData = {};
-      if (profileForm.name !== user.name) {
+      const updateData = {};      
+      if (profileForm.name !== originalUser.name) {
         updateData.name = profileForm.name;
       }
-      if (profileForm.email !== user.email) {
+      if (profileForm.email !== originalUser.email) {
         updateData.email = profileForm.email;
       }
-      
+            
       if (Object.keys(updateData).length === 0) {
         setProfileError('No changes detected');
         setProfileLoading(false);
         return;
       }
       
-      await dispatch(updateUserProfile(updateData)).unwrap();
+      const result = await dispatch(updateUserProfile(updateData)).unwrap();
+
+      // Try setting states one by one with delays to debug
+      setModalMessage('Profile updated successfully!');
+      
       setProfileSuccess('Profile updated successfully!');
+      
+      setShowSuccessModal(prev => {
+        return true;
+      });
+      
+      // Update original user values to reflect the changes
+      setOriginalUser(prev => ({
+        ...prev,
+        ...updateData
+      }));
+      
+      // Check the state after a brief delay to see if it updated
+      setTimeout(() => {
+        console.log('showSuccessModal after timeout:', showSuccessModal);
+      }, 100);
     } catch (error) {
-      setProfileError(error.message || 'Failed to update profile');
+      console.log('Error!!:', error);
+      const errorMessage = error || 'Failed to update profile';
+      setProfileError(errorMessage);
     } finally {
       setProfileLoading(false);
     }
@@ -96,6 +151,8 @@ const Settings = () => {
         new_password: passwordForm.newPassword
       })).unwrap();
       
+      setModalMessage('Password updated successfully!');
+      setShowSuccessModal(true);
       setPasswordSuccess('Password updated successfully!');
       setPasswordForm({
         currentPassword: '',
@@ -148,23 +205,23 @@ const Settings = () => {
         <h2 style={styles.sectionTitle}>Profile Information</h2>
         <form onSubmit={handleProfileSubmit}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Name</label>
+            <label className="form-label">Name</label>
             <input
               type="text"
               value={profileForm.name}
               onChange={(e) => setProfileForm({ ...profileForm, name: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
             />
           </div>
           
           <div style={styles.formGroup}>
-            <label style={styles.label}>Email</label>
+            <label className="form-label">Email</label>
             <input
               type="email"
               value={profileForm.email}
               onChange={(e) => setProfileForm({ ...profileForm, email: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
             />
           </div>
@@ -188,35 +245,35 @@ const Settings = () => {
         <h2 style={styles.sectionTitle}>Change Password</h2>
         <form onSubmit={handlePasswordSubmit}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Current Password</label>
+            <label className="form-label">Current Password</label>
             <input
               type="password"
               value={passwordForm.currentPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, currentPassword: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
             />
           </div>
           
           <div style={styles.formGroup}>
-            <label style={styles.label}>New Password</label>
+            <label className="form-label">New Password</label>
             <input
               type="password"
               value={passwordForm.newPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, newPassword: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
               minLength={6}
             />
           </div>
           
           <div style={styles.formGroup}>
-            <label style={styles.label}>Confirm New Password</label>
+            <label className="form-label">Confirm New Password</label>
             <input
               type="password"
               value={passwordForm.confirmPassword}
               onChange={(e) => setPasswordForm({ ...passwordForm, confirmPassword: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
               minLength={6}
             />
@@ -245,23 +302,23 @@ const Settings = () => {
         
         <form onSubmit={handleDeleteSubmit}>
           <div style={styles.formGroup}>
-            <label style={styles.label}>Enter your password to confirm</label>
+            <label className="form-label">Enter your password to confirm</label>
             <input
               type="password"
               value={deleteForm.password}
               onChange={(e) => setDeleteForm({ ...deleteForm, password: e.target.value })}
-              style={styles.input}
+              className="form-input"
               required
             />
           </div>
           
           <div style={styles.formGroup}>
-            <label style={styles.label}>Type "DELETE" to confirm</label>
+            <label className="form-label">Type "DELETE" to confirm</label>
             <input
               type="text"
               value={deleteForm.confirmation}
               onChange={(e) => setDeleteForm({ ...deleteForm, confirmation: e.target.value })}
-              style={styles.input}
+              className="form-input"
               placeholder="Type DELETE here"
               required
             />
@@ -271,13 +328,27 @@ const Settings = () => {
           
           <button 
             type="submit" 
-            style={{ ...styles.button, backgroundColor: '#d32f2f', borderColor: '#d32f2f' }}
+            className='btn btn-danger'
+            style={{ ...styles.button }}
             disabled={deleteLoading}
           >
             {deleteLoading ? 'Deleting...' : 'Delete Account'}
           </button>
         </form>
       </div>
+      
+      {/* Success Modal */}
+      {showSuccessModal && (
+        <>
+          {console.log('Rendering CustomizedModal with:', { showSuccessModal, modalMessage })}
+          <CustomizedModal
+            onClose={() => setShowSuccessModal(false)}
+            confirmMessage={modalMessage}
+            confirmButtonText="OK"
+            type="alert"
+          />
+        </>
+      )}
     </div>
   );
 };

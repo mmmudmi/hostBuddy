@@ -29,8 +29,8 @@ const Navbar = () => {
               <span style={styles.userInfo}>
                 Welcome, {user?.name}
               </span>
-              <Link to="/settings" className="btn btn-transparent" style={{ marginRight: '8px' }}>
-                Settings
+              <Link to="/settings" className="btn btn-transparent" style={{fontSize: '1.5pc', marginRight: '-1pc'}}>
+                <i className="fa-solid fa-circle-user"></i>
               </Link>
               <button 
                 onClick={handleLogout}
@@ -76,7 +76,7 @@ const styles = {
   navLinks: {
     display: 'flex',
     alignItems: 'center',
-    gap: '1rem',
+    // gap: '1rem',
   },
   navLink: {
     textDecoration: 'none',
@@ -85,10 +85,6 @@ const styles = {
     padding: '8px 16px',
     borderRadius: '6px',
     transition: 'background-color 0.2s ease',
-  },
-  signupBtn: {
-    backgroundColor: '#3b82f6',
-    color: 'white',
   },
   logoutBtn: {
     background: 'none',

@@ -41,9 +41,7 @@ const LoginPage = () => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    console.log('Login attempt with:', { email: formData.email, password: '***' });
-    
+    e.preventDefault();    
     // Dispatch the action without unwrap() to let Redux handle the error state
     const resultAction = await dispatch(loginUser({
       email: formData.email,
