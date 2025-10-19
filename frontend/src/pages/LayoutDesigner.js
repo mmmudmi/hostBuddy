@@ -5708,8 +5708,8 @@ const LayoutDesigner = () => {
                     stroke="#3b82f6"
                     strokeWidth={2}
                     dash={[8, 4]}
-                    listening={true}
-                    draggable={true}
+                    listening={!isShiftHeld} // Don't listen for events when shift is held
+                    draggable={!isShiftHeld} // Don't make draggable when shift is held
                     name="temp-group-bounds"
                     onDragMove={(e) => {
                       // Real-time movement of temp group bounds and elements
