@@ -37,12 +37,12 @@ const AnimatedBackground = ({ className, style }) => {
       var path = new paper.Path();
       var mousePos = paper.view.center.divide(2);
       var pathHeight = mousePos.y;
-      path.fillColor = new paper.Color(1, 1, 1, 0.06);
+      path.fillColor = new paper.Color(1, 1, 1, 0.09);
       
       function initializePath() {
         center = paper.view.center;
         width = paper.view.size.width;
-        height = paper.view.size.height * 0.7;
+        height = paper.view.size.height * 0.6;
         path.segments = [];
         path.add(paper.view.bounds.bottomLeft);
         for (var i = 1; i < points; i++) {
