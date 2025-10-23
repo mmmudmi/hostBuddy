@@ -43,11 +43,11 @@ const Footer = () => {
           </div>
         </div> */}
         
-        <div style={styles.footerBottom}>
+        {/* <div style={styles.footerBottom}> */}
           <p style={styles.copyright}>
-            Pearploy Chaicharoensin
+            Developed by Pearploy Chaicharoensin
           </p>
-        </div>
+        {/* </div> */}
       </div>
     </footer>
   );
@@ -55,9 +55,9 @@ const Footer = () => {
 
 const styles = {
   footer: {
-    backgroundColor: '#1f2937',
+    backgroundColor: '#000000ff',
     color: 'white',
-    padding: '3rem 0 1rem',
+    padding: '2rem',
     marginTop: 'auto',
   },
   footerContent: {
@@ -96,8 +96,9 @@ const styles = {
     textAlign: 'center',
   },
   copyright: {
-    color: '#9ca3af',
+    color: '#ffcde4ff',
     fontSize: '0.875rem',
+    textAlign: 'center',
   },
 };
 

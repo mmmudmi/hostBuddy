@@ -35,6 +35,7 @@ const Navbar = () => {
               <button 
                 onClick={handleLogout}
                 className="btn btn-transparent"
+                style={{fontSize: '0.9rem'}}
               >
                 Logout
               </button>
